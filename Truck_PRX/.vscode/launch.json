@@ -12,7 +12,7 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/.pio/build/megaatmega2560/firmware.elf",
+            "executable": "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/.pio/build/megaatmega2560/firmware.elf",
             "toolchainBinDir": "C:/Users/Kodiak/.platformio/packages/toolchain-atmelavr/bin",
             "preLaunchTask": {
                 "type": "PlatformIO",
@@ -24,7 +24,7 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/.pio/build/megaatmega2560/firmware.elf",
+            "executable": "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/.pio/build/megaatmega2560/firmware.elf",
             "toolchainBinDir": "C:/Users/Kodiak/.platformio/packages/toolchain-atmelavr/bin",
             "internalConsoleOptions": "openOnSessionStart"
         }

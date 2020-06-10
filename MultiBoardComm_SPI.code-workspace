@@ -6,6 +6,9 @@
 		{
 			"name": "RightFrontNano_Slave",
 			"path": "RightFrontNano_Slave"
+		},
+		{
+			"path": "Truck_PRX"
 		}
 	],
 	"settings": {}

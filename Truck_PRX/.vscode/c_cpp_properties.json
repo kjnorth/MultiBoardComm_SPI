@@ -6,11 +6,11 @@
         {
             "name": "Win32",
             "includePath": [
-                "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/include",
-                "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/src",
-                "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/lib/RF24",
+                "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/include",
+                "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/src",
+                "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/lib/RF24",
                 "C:/Users/Kodiak/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
-                "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/lib/DataLog",
+                "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/lib/DataLog",
                 "C:/Users/Kodiak/.platformio/packages/framework-arduino-avr/cores/arduino",
                 "C:/Users/Kodiak/.platformio/packages/framework-arduino-avr/variants/mega",
                 "C:/Users/Kodiak/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
@@ -23,11 +23,11 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/include",
-                    "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/src",
-                    "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/lib/RF24",
+                    "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/include",
+                    "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/src",
+                    "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/lib/RF24",
                     "C:/Users/Kodiak/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
-                    "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/NewPL-TruckComm_NRF24L01/Truck_PRX/lib/DataLog",
+                    "C:/Users/Kodiak/Documents/PlatformIO/Masterhaul_PIO/MultiBoardComm_SPI/Truck_PRX/lib/DataLog",
                     "C:/Users/Kodiak/.platformio/packages/framework-arduino-avr/cores/arduino",
                     "C:/Users/Kodiak/.platformio/packages/framework-arduino-avr/variants/mega",
                     "C:/Users/Kodiak/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",

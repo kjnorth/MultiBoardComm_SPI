@@ -14,14 +14,12 @@ typedef struct
 	uint8_t		Phase;
 	uint8_t		LEDControl;
 	int32_t 	FrontEncoder;
-	// uint16_t	Count;
 } TX_TO_RX;
 
 typedef struct
 {
 	uint8_t		SwitchStatus;
 	uint8_t		SolenoidStatus;
-	// uint16_t 	Count;
 } RX_TO_TX;
 
 #define NUM_TTR_BYTES sizeof(TX_TO_RX)
