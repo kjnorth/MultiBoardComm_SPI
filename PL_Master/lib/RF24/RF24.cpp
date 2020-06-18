@@ -46,25 +46,25 @@ void RF24::csn(bool mode)
     // CLK:BUS 8Mhz:2Mhz, 16Mhz:4Mhz, or 20Mhz:5Mhz
 
         #if !defined(SOFTSPI)
-        // _SPI.setBitOrder(MSBFIRST); // kodiak - removed to abstract into mainMaster.cpp
-        // _SPI.setDataMode(SPI_MODE0);
-        //         #if !defined(F_CPU) || F_CPU < 20000000
-        //     _SPI.setClockDivider(SPI_CLOCK_DIV2);
-        //             #elif F_CPU < 40000000
-        //     _SPI.setClockDivider(SPI_CLOCK_DIV4);
-        //             #elif F_CPU < 80000000
-        //     _SPI.setClockDivider(SPI_CLOCK_DIV8);
-        //             #elif F_CPU < 160000000
-        //     _SPI.setClockDivider(SPI_CLOCK_DIV16);
-        //             #elif F_CPU < 320000000
-        //     _SPI.setClockDivider(SPI_CLOCK_DIV32);
-        //             #elif F_CPU < 640000000
-        //     _SPI.setClockDivider(SPI_CLOCK_DIV64);
-        //             #elif F_CPU < 1280000000
-        //     _SPI.setClockDivider(SPI_CLOCK_DIV128);
-        //             #else
-        //                 #error "Unsupported CPU frequency. Please set correct SPI divider."
-        //             #endif
+        _SPI.setBitOrder(MSBFIRST);
+        _SPI.setDataMode(SPI_MODE0);
+                #if !defined(F_CPU) || F_CPU < 20000000
+            _SPI.setClockDivider(SPI_CLOCK_DIV2);
+                    #elif F_CPU < 40000000
+            _SPI.setClockDivider(SPI_CLOCK_DIV4);
+                    #elif F_CPU < 80000000
+            _SPI.setClockDivider(SPI_CLOCK_DIV8);
+                    #elif F_CPU < 160000000
+            _SPI.setClockDivider(SPI_CLOCK_DIV16);
+                    #elif F_CPU < 320000000
+            _SPI.setClockDivider(SPI_CLOCK_DIV32);
+                    #elif F_CPU < 640000000
+            _SPI.setClockDivider(SPI_CLOCK_DIV64);
+                    #elif F_CPU < 1280000000
+            _SPI.setClockDivider(SPI_CLOCK_DIV128);
+                    #else
+                        #error "Unsupported CPU frequency. Please set correct SPI divider."
+                    #endif
 
                 #endif
     #elif defined(RF24_RPi)
@@ -661,7 +661,7 @@ bool RF24::begin(void)
         pinMode(csn_pin, OUTPUT);
     }
 
-    // _SPI.begin(); // kodiak - removed to abstract into mainMaster.cpp
+    _SPI.begin();
     ce(LOW);
     csn(HIGH);
             #if defined(__ARDUINO_X86__)

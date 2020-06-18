@@ -10,13 +10,6 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
-#define SPI_SPEED_MAX 20000000
-/** NOTE: Arduino SPI Slaves default to MSBFIRST and SPI_MODE0.
- * Do not change these settings unless you want to figure out
- * how to alter them on the slaves */
-SPISettings mySettings(SPI_SPEED_MAX/128, MSBFIRST, SPI_MODE0);
-
-void InitSPI(void);
 void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
@@ -28,7 +21,6 @@ void setup() {
   Serial.begin(115200);
   LogInfo("SPI Master boots up\n");
   
-  InitSPI();
   InitRadio();
 }
 
@@ -42,29 +34,9 @@ void loop() {
 
   // right front nano comm
   static uint8_t send = 0xA0;
-  uint8_t rec = 0x00;
-  uint8_t floatByteSize = sizeof(float);
-  uint8_t buf[floatByteSize] = {0};
-  SPI.beginTransaction(mySettings);
-  digitalWrite(RIGHT_FRONT_SS_PIN, LOW);
-  rec = SPI.transfer(send++);
-  uint8_t count = 0;
-  while (count < floatByteSize) {
-    delay(500);
-    // delay(3);
-    buf[count++] = SPI.transfer(send++);
-  }
-  digitalWrite(RIGHT_FRONT_SS_PIN, HIGH);
-  SPI.endTransaction();
-  if (send > 0xA4) {
-    send = 0xA0;
-  }
+  static uint8_t rec = 0x00;
 
   int32_t ires = 0;
-  ires |= (uint32_t)buf[3] << 24;
-  ires |= (uint32_t)buf[2] << 16;
-  ires |= (uint32_t)buf[1] << 8;
-  ires |= (uint32_t)buf[0] << 0;
   float receivedFloat = (float)(ires/1000.0);
   if (curTime - preLogTime >= 1000) {
     LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d, "),
@@ -79,12 +51,6 @@ void loop() {
     UpdateTruckData();
     preSendTime = curTime;
   }
-}
-
-void InitSPI(void) {
-  pinMode(RIGHT_FRONT_SS_PIN, OUTPUT);
-  digitalWrite(RIGHT_FRONT_SS_PIN, HIGH);
-  SPI.begin();
 }
 
 void InitRadio(void) {
