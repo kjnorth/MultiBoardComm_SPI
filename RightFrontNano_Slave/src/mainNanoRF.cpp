@@ -4,10 +4,14 @@
 #include "..\lib\DataLog\DataLog.h"
 #include "..\lib\RoboClaw\RoboClaw.h"
 
-#define ROBOCLAW_ADDRESS 0x80
-SoftwareSerial mySerial(3, 2); // RX, TX
-RoboClaw rclaw(&mySerial, 3500);
 void InitRoboclaw(void);
+uint16_t GetCRC16(unsigned char *buf, int nBytes);
+
+#define ROBOCLAW_ADDRESS 0x80
+SoftwareSerial rclawSerial(3, 2); // Rx, Tx - roboclaw serial port
+RoboClaw rclaw(&rclawSerial, 3500);
+
+SoftwareSerial masterSerial(5, 4); // Rx, Tx - master board serial port
 
 uint8_t rec, send;
 float testFloat;
@@ -17,6 +21,7 @@ static unsigned long preTime = 0;
 #define TEST 0
 void setup() {
   Serial.begin(9600);
+  // masterSerial.begin(115200);
   LogInfo("Right Front Nano software begins\n");
 //   InitRoboclaw();
   testFloat = -2.464;
@@ -55,4 +60,20 @@ void InitRoboclaw(void) {
 		rclaw.SetM1DefaultAccel(ROBOCLAW_ADDRESS, 0xF);
 		rclaw.SetM2DefaultAccel(ROBOCLAW_ADDRESS, 0xF);
 	}
+}
+
+// Calculates CRC16 of nBytes of data in byte array message
+uint16_t GetCRC16(unsigned char *buf, int nBytes) {
+	uint16_t crc = 0;
+	for (int byte = 0; byte < nBytes; byte++) {
+		crc = crc ^ ((unsigned int)buf[byte] << 8);
+		for (unsigned char bit = 0; bit < 8; bit++) {
+			if (crc & 0x8000) {
+				crc = (crc << 1) ^ 0x1021;
+			} else {
+				crc = crc << 1;
+			}
+		}
+	}
+ 	return crc;
 }

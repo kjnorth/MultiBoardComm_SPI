@@ -10,16 +10,26 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
+#define NANO_RF Serial1
+#define NANO_RF_UADDR 0xE9 // nano right front unique address
+#define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
+
+#define M5_STOP_CMD 0xF0
+#define M5_FORWARD_CMD 0xF1
+#define M5_REVERSE_CMD 0xF2
+
 void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
+uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 TX_TO_RX ttr;
 RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 
 void setup() {
   Serial.begin(115200);
-  LogInfo("SPI Master boots up\n");
+  NANO_RF.begin(115200);
+  LogInfo("Master boots up\n");
   
   InitRadio();
 }
@@ -32,9 +42,33 @@ static RX_TO_TX rtt;
 void loop() {
   curTime = millis();
 
-  // right front nano comm
   static uint8_t send = 0xA0;
   static uint8_t rec = 0x00;
+  IsConnected();
+  if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
+    // truck comm
+    UpdateTruckData();
+    // right front nano comm
+    if (NANO_RF.availableForWrite()) {
+      // write 1 byte ADDR, 1 byte CMD
+      unsigned char buf[3];
+      buf[0] = NANO_RF_UADDR; buf[1] = M5_FORWARD_CMD;
+      uint16_t crc = GetCRC16(buf, 2);
+      buf[3] = crc;
+      NANO_RF.write(buf, 3);
+      unsigned long t = micros();
+      while (!NANO_RF.available()) {};
+      uint8_t recByte = NANO_RF.read();
+      if (recByte == NANO_RF_UACK) {
+        LogInfo("transmission OK - respond time %lu\n", micros()-t);
+      }
+      else {
+        LogInfo("ERROR - incorrect byte received!\n");
+      }
+
+    }
+    preSendTime = curTime;
+  }
 
   int32_t ires = 0;
   float receivedFloat = (float)(ires/1000.0);
@@ -45,12 +79,6 @@ void loop() {
     preLogTime = curTime;
   }
 
-  // truck comm
-  IsConnected();
-  if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
-    UpdateTruckData();
-    preSendTime = curTime;
-  }
 }
 
 void InitRadio(void) {
@@ -115,4 +143,20 @@ void UpdateTruckData(void) {
 #else    
   radio.writeFast(&ttr, NUM_TTR_BYTES, 0);
 #endif   
+}
+
+// Calculates CRC16 of nBytes of data in byte array message
+uint16_t GetCRC16(unsigned char *buf, int nBytes) {
+	uint16_t crc = 0;
+	for (int byte = 0; byte < nBytes; byte++) {
+		crc = crc ^ ((unsigned int)buf[byte] << 8);
+		for (unsigned char bit = 0; bit < 8; bit++) {
+			if (crc & 0x8000) {
+				crc = (crc << 1) ^ 0x1021;
+			} else {
+				crc = crc << 1;
+			}
+		}
+	}
+ 	return crc;
 }
