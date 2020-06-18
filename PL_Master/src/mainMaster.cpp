@@ -10,6 +10,13 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
+#define SPI_SPEED_MAX 20000000
+/** NOTE: Arduino SPI Slaves default to MSBFIRST and SPI_MODE0.
+ * Do not change these settings unless you want to figure out
+ * how to alter them on the slaves */
+SPISettings mySettings(SPI_SPEED_MAX/4, MSBFIRST, SPI_MODE0);
+
+void InitSPI(void);
 void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
@@ -20,14 +27,8 @@ RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 void setup() {
   Serial.begin(115200);
   LogInfo("SPI Master boots up\n");
-
-  ttr.Phase = 0xA4;
-  ttr.LEDControl = 0xB7;
-  ttr.FrontEncoder = 157291;
-
-#ifdef RF_USE_IRQ_PIN
-  pinMode(RF_IRQ_PIN, INPUT);
-#endif  
+  
+  InitSPI();
   InitRadio();
 }
 
@@ -38,21 +39,58 @@ unsigned long lastReceiveTime = 0;
 static RX_TO_TX rtt;
 void loop() {
   curTime = millis();
-  IsConnected(); 
 
-  if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
-    UpdateTruckData();
-    preSendTime = curTime;
-  }
+  // right front nano comm
+  uint8_t send = 0xA0;
+  uint8_t rec = 0x00;
 
-  if (curTime - preLogTime >= 1000) {
-    LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
-                rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
+  uint8_t *buf;
+  SPI.beginTransaction(mySettings);
+  digitalWrite(RIGHT_FRONT_SS_PIN, LOW);
+  rec = SPI.transfer(send++);
+  if (send > 0xA5)
+    send = 0xA0;
+  // uint8_t floatByteSize = sizeof(float);
+  // while (floatByteSize--) {
+  //   send++;
+  //   *buf = SPI.transfer(send);
+  //   // LogInfo("send 0x%X\n", send);
+  // }
+  digitalWrite(RIGHT_FRONT_SS_PIN, HIGH);
+  SPI.endTransaction();
+
+  float receivedFloat = 0.0;
+  memcpy(&receivedFloat, buf, sizeof(float));
+  if (curTime - preLogTime >= 100) {
+    LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d, NanoRF rec 0x%X\n"),
+                rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected(), rec);
+    // LogInfo("received float ", receivedFloat, 2, true);
     preLogTime = curTime;
   }
+
+  // truck comm
+  IsConnected();
+  // if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
+    // UpdateTruckData();
+    // preSendTime = curTime;
+  // }
+}
+
+void InitSPI(void) {
+  pinMode(RIGHT_FRONT_SS_PIN, OUTPUT);
+  digitalWrite(RIGHT_FRONT_SS_PIN, HIGH);
+  SPI.begin();
 }
 
 void InitRadio(void) {
+  ttr.Phase = 0xA4;
+  ttr.LEDControl = 0xB7;
+  ttr.FrontEncoder = 157291;
+
+#ifdef RF_USE_IRQ_PIN
+  pinMode(RF_IRQ_PIN, INPUT);
+#endif
+
   if (!radio.begin())
     Serial.println("PTX failed to initialize");
   else {

@@ -8,6 +8,7 @@
 #define CONFIG_PTX_H_
 
 #include <Arduino.h>
+#include <SPI.h>
 
 typedef struct
 {
@@ -35,12 +36,14 @@ typedef struct
  * module to Arduino. @note that code is set up such that
  * the module's IRQ pin does not need to be mapped to an
  * interrupt pin on the Arduino */
-// #define RF_USE_IRQ_PIN
+#define RF_USE_IRQ_PIN
 #define RF_IRQ_PIN              48
 #define RF_CE_PIN				49
 #define	RF_MISO_PIN             50
 #define RF_MOSI_PIN             51
 #define RF_CLK_PIN              52
-#define RF_CSN_PIN				53
+#define RF_CSN_PIN				53 // slave select pin
+
+#define RIGHT_FRONT_SS_PIN		5 // right front nano slave select pin
 
 #endif /* CONFIG_PTX_H_ */

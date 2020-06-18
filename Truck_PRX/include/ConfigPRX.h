@@ -33,7 +33,7 @@ typedef struct
  * module to Arduino. @note that code is set up such that
  * the module's IRQ pin does not need to be mapped to an
  * interrupt pin on the Arduino */
-// #define RF_USE_IRQ_PIN
+#define RF_USE_IRQ_PIN
 #define RF_IRQ_PIN              48
 #define RF_CE_PIN				49
 #define	RF_MISO_PIN             50
