@@ -14,7 +14,7 @@
 /** NOTE: Arduino SPI Slaves default to MSBFIRST and SPI_MODE0.
  * Do not change these settings unless you want to figure out
  * how to alter them on the slaves */
-SPISettings mySettings(SPI_SPEED_MAX/4, MSBFIRST, SPI_MODE0);
+SPISettings mySettings(SPI_SPEED_MAX/128, MSBFIRST, SPI_MODE0);
 
 void InitSPI(void);
 void InitRadio(void);
@@ -43,7 +43,6 @@ void loop() {
   // right front nano comm
   static uint8_t send = 0xA0;
   uint8_t rec = 0x00;
-
   uint8_t floatByteSize = sizeof(float);
   uint8_t buf[floatByteSize] = {0};
   SPI.beginTransaction(mySettings);
@@ -51,7 +50,8 @@ void loop() {
   rec = SPI.transfer(send++);
   uint8_t count = 0;
   while (count < floatByteSize) {
-    delay(3);
+    delay(500);
+    // delay(3);
     buf[count++] = SPI.transfer(send++);
   }
   digitalWrite(RIGHT_FRONT_SS_PIN, HIGH);
@@ -67,18 +67,18 @@ void loop() {
   ires |= (uint32_t)buf[0] << 0;
   float receivedFloat = (float)(ires/1000.0);
   if (curTime - preLogTime >= 1000) {
-  //   LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d, NanoRF rec 0x%X\n"),
-  //               rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected(), rec);
+    LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d, "),
+                rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected(), rec);
     LogInfo("received float ", receivedFloat, 3, true);
     preLogTime = curTime;
   }
 
   // truck comm
   IsConnected();
-  // if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
-    // UpdateTruckData();
-    // preSendTime = curTime;
-  // }
+  if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
+    UpdateTruckData();
+    preSendTime = curTime;
+  }
 }
 
 void InitSPI(void) {

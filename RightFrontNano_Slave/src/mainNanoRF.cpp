@@ -93,11 +93,11 @@ ISR (SPI_STC_vect) {
 
 void loop() {
   curTime = millis();
-  if (curTime - preTime >= 2000) {
+  if (curTime - preTime >= 1000) {
     // LogInfo("float expected ", (float)(temp/1000.0), 3);
     // LogInfo(" float reconstructed ", fres, 3, true);
     preTime = curTime;
-
+LogInfo("byte received 0x%X\n", rec);
     /** NOTE: need the noInterrupts / interrupts whenever updating
      * pitch / roll data! */
     noInterrupts();
