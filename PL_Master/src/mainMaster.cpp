@@ -41,30 +41,35 @@ void loop() {
   curTime = millis();
 
   // right front nano comm
-  uint8_t send = 0xA0;
+  static uint8_t send = 0xA0;
   uint8_t rec = 0x00;
 
-  uint8_t *buf;
+  uint8_t floatByteSize = sizeof(float);
+  uint8_t buf[floatByteSize] = {0};
   SPI.beginTransaction(mySettings);
   digitalWrite(RIGHT_FRONT_SS_PIN, LOW);
   rec = SPI.transfer(send++);
-  if (send > 0xA5)
-    send = 0xA0;
-  // uint8_t floatByteSize = sizeof(float);
-  // while (floatByteSize--) {
-  //   send++;
-  //   *buf = SPI.transfer(send);
-  //   // LogInfo("send 0x%X\n", send);
-  // }
+  uint8_t count = 0;
+  while (count < floatByteSize) {
+    delay(3);
+    buf[count++] = SPI.transfer(send++);
+  }
   digitalWrite(RIGHT_FRONT_SS_PIN, HIGH);
   SPI.endTransaction();
+  if (send > 0xA4) {
+    send = 0xA0;
+  }
 
-  float receivedFloat = 0.0;
-  memcpy(&receivedFloat, buf, sizeof(float));
-  if (curTime - preLogTime >= 100) {
-    LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d, NanoRF rec 0x%X\n"),
-                rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected(), rec);
-    // LogInfo("received float ", receivedFloat, 2, true);
+  int32_t ires = 0;
+  ires |= (uint32_t)buf[3] << 24;
+  ires |= (uint32_t)buf[2] << 16;
+  ires |= (uint32_t)buf[1] << 8;
+  ires |= (uint32_t)buf[0] << 0;
+  float receivedFloat = (float)(ires/1000.0);
+  if (curTime - preLogTime >= 1000) {
+  //   LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d, NanoRF rec 0x%X\n"),
+  //               rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected(), rec);
+    LogInfo("received float ", receivedFloat, 3, true);
     preLogTime = curTime;
   }
 
