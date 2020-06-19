@@ -14,22 +14,28 @@
 #define NANO_RF_UADDR 0xE9 // nano right front unique address
 #define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
 #define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
-
-#define M5_STOP_CMD 0xF0
-#define M5_FORWARD_CMD 0xF1
-#define M5_REVERSE_CMD 0xF2
+#define ACK_CRC_NOT_MATCHED 0x4E
 
 // all sub devices receive commands in the format of this typedef
 typedef struct {
   uint8_t devAddr;
   uint8_t command;
   uint16_t crc;
-} sub_cmd_t;
+} sub_packet_t;
+
+typedef enum {
+  SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
+  LASER_DISABLE, LASER_ENABLE,
+  M5_STOP, M5_FORWARD, M5_REVERSE,
+  TR_LATCH, TR_UNLATCH,
+  GET_PITCH, GET_ROLL, GET_SOL_STATUS, GET_SW_STATUS,
+} sub_dev_cmd_t;
 
 void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
-void ConfigCmd(sub_cmd_t *newCmd, uint8_t addr, uint8_t cmdByte);
+void SendNanoRFData(void);
+void ConfigCmd(sub_packet_t *newCmd, uint8_t uaddr, sub_dev_cmd_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 TX_TO_RX ttr;
@@ -37,7 +43,7 @@ RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 
 void setup() {
   Serial.begin(115200);
-  COMM_BUS.begin(115200);
+  COMM_BUS.begin(9600);
   LogInfo("Master boots up\n");
   InitRadio();
 }
@@ -51,33 +57,25 @@ void loop() {
   curTime = millis();
 
   static bool cmdReceived = false;
+  static unsigned long t = 0;
+  static int i = 0;
   IsConnected();
   if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
     // truck comm
     UpdateTruckData();
     // right front nano comm
-    if (COMM_BUS.availableForWrite() && !cmdReceived) { // TODO: ADD motor stop btn!
-      sub_cmd_t *newCmd = (sub_cmd_t*)malloc(sizeof(sub_cmd_t));
-      newCmd->devAddr = NANO_RF_UADDR;
-      newCmd->command = M5_FORWARD_CMD;
-      newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_cmd_t)-2);
-      COMM_BUS.write((unsigned char *)newCmd, sizeof(sub_cmd_t));
-      free(newCmd);
-
-      unsigned long t = micros();
-      while (!COMM_BUS.available()) {};
-      uint8_t recByte = COMM_BUS.read();
-      if (recByte == NANO_RF_UACK) {
-        LogInfo("transmission OK - respond time %lu\n", micros()-t);
-        cmdReceived = true;
-      }
-      else {
-        LogInfo("ERROR - incorrect byte received!\n");
-      }
-
+    // SendNanoRFData();
+    if (COMM_BUS.availableForWrite()) {
+      COMM_BUS.write(NANO_RF_UADDR);
+      t = micros();
+    }
+    if (COMM_BUS.available()) {
+      uint8_t rec = COMM_BUS.read();
+      LogInfo(F("rec 0x%X, respond time %lu, index %d\n"), rec, micros()-t, i);
     }
     preSendTime = curTime;
   }
+  i++;
 
   int32_t ires = 0;
   float receivedFloat = (float)(ires/1000.0);
@@ -89,15 +87,39 @@ void loop() {
   }
 }
 
+void SendNanoRFData(void) {
+  if (COMM_BUS.availableForWrite()) { // TODO: ADD motor stop btn!
+    // TODO: abstract all this into single write function *****
+    sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+    ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
+    COMM_BUS.write((unsigned char *)newCmd, sizeof(sub_packet_t));
+    free(newCmd);
+    // ********************************************************
+
+    unsigned long t = micros();
+    while (!COMM_BUS.available()) {};
+    uint8_t recByte = COMM_BUS.read();
+    if (recByte == NANO_RF_UACK) {
+      LogInfo("transmission OK - respond time %lu\n", micros()-t);
+    }
+    else {
+      LogInfo("ERROR - incorrect byte received or CRC no match, byte 0x%X\n", recByte);
+    }
+  }
+}
+
 /** 
  * @Author: Kodiak North 
  * @Date: 2020-06-19 09:31:10 
  * @Desc: sets newCmd member variables and computes crc
- * @p 
+ * @Param - newCmd: pointer to command struct
+ * @Param - addr: unique address of sub device
+ * @Param - cmdByte: byte corresponding to sub device command
  */
-
-void ConfigCmd(sub_cmd_t *newCmd, uint8_t addr, uint8_t cmdByte) {
-
+void ConfigCmd(sub_packet_t *newCmd, uint8_t uaddr, sub_dev_cmd_t cmdByte) {
+  newCmd->devAddr = uaddr;
+  newCmd->command = cmdByte;
+  newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_packet_t)-2);
 }
 
 /** 
