@@ -9,6 +9,13 @@
 #define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
 #define ACK_CRC_NOT_MATCHED 0x4E
 
+// all sub devices receive commands in the format of this typedef
+typedef struct {
+  uint8_t devAddr;
+  uint8_t command;
+  uint16_t crc;
+} sub_packet_t;
+
 // commands sent from master board
 typedef enum {
   SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
@@ -24,7 +31,7 @@ uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 #define ROBOCLAW_ADDRESS 0x80
 SoftwareSerial rclawSerial(5, 4); // Rx, Tx - roboclaw serial port
-RoboClaw rclaw(&rclawSerial, 3500);
+RoboClaw rclaw(&rclawSerial, 3500); // note: timeout is in microseconds
 
 SoftwareSerial masterSerial(3, 2); // Rx, Tx - master board serial port
 
@@ -36,7 +43,7 @@ static unsigned long preTime = 0;
 #define TEST 0
 void setup() {
   Serial.begin(9600);
-  masterSerial.begin(9600);
+  masterSerial.begin(115200);
   LogInfo("Right Front Nano software begins\n");
 //   InitRoboclaw();
   testFloat = -2.464;
@@ -44,25 +51,18 @@ void setup() {
 
 void loop() {
   curTime = millis();
-  // void RecMasterData(void);
-  if (masterSerial.available()) {
-    rec = masterSerial.read();
-    if (rec == NANO_RF_UADDR) {
-      LogInfo("got uaddr\n");
-      // delay(100);
-      // if (masterSerial.availableForWrite())
-        masterSerial.write(NANO_RF_UACK);
-      // else
-      //   LogInfo("master not ready for write!!!!\n");
-    }
-    else
-      LogInfo("wrong byte rec 0x%X\n", rec);
-  }
-  else {
-    LogInfo("no data available\n");
-  }
+  RecMasterData();
+  // if (masterSerial.available()) {
+  //   sub_packet_t *recCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+  //   masterSerial.readBytes((uint8_t *)recCmd, sizeof(sub_packet_t));
+  //   LogInfo(F("addr 0x%X, cmd 0x%X, crc 0x%X\n"), recCmd->devAddr, recCmd->command, recCmd->crc);
+  //   free(recCmd);
+  // }
+  // else {
+  //   // LogInfo("no data available\n");
+  // }
 
-  delay(100);
+  // delay(100);
 
   if (curTime - preTime >= 1000) {
     preTime = curTime;
@@ -73,30 +73,24 @@ void loop() {
 
 void RecMasterData(void) {
   if (masterSerial.available()) {
-    LogInfo("data available\n");
-    // TODO: read all these into data struct like in master software
-    unsigned char buf[4] = {0};
-    masterSerial.readBytes(buf, 4);
-    uint16_t crcCalc = GetCRC16(buf, 2);
-    uint16_t crcRec = (uint16_t)((buf[3] << 8) | buf[4]);
-    LogInfo(F("crc calc 0x%X, crc rec 0x%X\n"), crcCalc, crcRec);
-    if (crcCalc == crcRec) {
-      LogInfo("crc match\n");
+    sub_packet_t *recCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+    masterSerial.readBytes((uint8_t *)recCmd, sizeof(sub_packet_t));
+    uint16_t crcCalc = GetCRC16((unsigned char *)recCmd, 2);
+    if (crcCalc == recCmd->crc) {
       // got uncorrupted data
-      if (buf[0] == NANO_RF_UADDR) {
-        LogInfo("talking to this dev\n");
+      if (recCmd->devAddr == NANO_RF_UADDR) {
         // cmd packet sent to this device
-        switch (buf[1]) { // buf[1] contains the command
+        switch (recCmd->command) {
           case M5_STOP:
-            rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
+            // rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
             masterSerial.write(NANO_RF_UACK);
             break;
           case M5_FORWARD:
-            rclaw.ForwardM2(ROBOCLAW_ADDRESS, 25);
+            // rclaw.ForwardM2(ROBOCLAW_ADDRESS, 25);
             masterSerial.write(NANO_RF_UACK);
             break;
           case M5_REVERSE:
-            rclaw.BackwardM2(ROBOCLAW_ADDRESS, 25);
+            // rclaw.BackwardM2(ROBOCLAW_ADDRESS, 25);
             masterSerial.write(NANO_RF_UACK);
             break;
           default:
@@ -109,12 +103,10 @@ void RecMasterData(void) {
       }
     }
     else {
-      LogInfo("crc not match\n");
-      // masterSerial.write(ACK_CRC_NOT_MATCHED);
+      // LogInfo("crc not match\n");
+      masterSerial.write(ACK_CRC_NOT_MATCHED);
     }
-  }
-  else {
-    LogInfo("no data available\n");
+    free(recCmd);
   }
 }
 

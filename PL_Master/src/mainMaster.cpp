@@ -15,6 +15,8 @@
 #define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
 #define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
 #define ACK_CRC_NOT_MATCHED 0x4E
+#define NUM_RETRYS 2
+#define TIMEOUT 20 // us
 
 // all sub devices receive commands in the format of this typedef
 typedef struct {
@@ -43,7 +45,7 @@ RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 
 void setup() {
   Serial.begin(115200);
-  COMM_BUS.begin(9600);
+  COMM_BUS.begin(115200);
   LogInfo("Master boots up\n");
   InitRadio();
 }
@@ -60,19 +62,19 @@ void loop() {
   static unsigned long t = 0;
   static int i = 0;
   IsConnected();
-  if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
+  if (curTime - preSendTime >= 100) { // write data to truck PRX at 100Hz frequency
     // truck comm
     UpdateTruckData();
     // right front nano comm
-    // SendNanoRFData();
-    if (COMM_BUS.availableForWrite()) {
-      COMM_BUS.write(NANO_RF_UADDR);
-      t = micros();
-    }
-    if (COMM_BUS.available()) {
-      uint8_t rec = COMM_BUS.read();
-      LogInfo(F("rec 0x%X, respond time %lu, index %d\n"), rec, micros()-t, i);
-    }
+    SendNanoRFData();
+    // if (COMM_BUS.availableForWrite()) {
+    //   COMM_BUS.write(NANO_RF_UADDR);
+    //   t = micros();
+    // }
+    // if (COMM_BUS.available()) {
+    //   uint8_t rec = COMM_BUS.read();
+    //   LogInfo(F("rec 0x%X, respond time %lu, index %d\n"), rec, micros()-t, i);
+    // }
     preSendTime = curTime;
   }
   i++;
@@ -88,24 +90,30 @@ void loop() {
 }
 
 void SendNanoRFData(void) {
-  if (COMM_BUS.availableForWrite()) { // TODO: ADD motor stop btn!
-    // TODO: abstract all this into single write function *****
-    sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-    ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
+  sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+  ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
+  uint8_t trys = NUM_RETRYS;
+  uint32_t start = micros();
+  int8_t rec = 0;
+  while (trys--) {
     COMM_BUS.write((unsigned char *)newCmd, sizeof(sub_packet_t));
-    free(newCmd);
-    // ********************************************************
-
-    unsigned long t = micros();
-    while (!COMM_BUS.available()) {};
-    uint8_t recByte = COMM_BUS.read();
-    if (recByte == NANO_RF_UACK) {
-      LogInfo("transmission OK - respond time %lu\n", micros()-t);
+    while (!COMM_BUS.available()) {
+      if (micros() - start >= TIMEOUT) {
+        rec = -1;
+        break;
+      }
     }
-    else {
-      LogInfo("ERROR - incorrect byte received or CRC no match, byte 0x%X\n", recByte);
+    if (rec > -1) {
+      rec = COMM_BUS.read();
+      if (rec == NANO_RF_UACK) {
+        LogInfo("OK\n");
+        break;
+      }
+      else if (rec == ACK_CRC_NOT_MATCHED)
+        LogInfo("crc not matched, trys %d\n", trys);
     }
   }
+  free(newCmd);
 }
 
 /** 
