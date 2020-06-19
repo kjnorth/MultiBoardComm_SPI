@@ -11,6 +11,7 @@
 #include "RF24.h"
 
 #define COMM_BUS Serial1
+// NOTE: if you throw these in an enum, make sure to start it at 1!!!! or greater since cmds start at 1
 #define NANO_RF_UADDR 0xE9 // nano right front unique address
 #define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
 #define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
@@ -25,8 +26,9 @@ typedef struct {
   uint16_t crc;
 } sub_packet_t;
 
+// start cmd at 1 since timeout response is 0
 typedef enum {
-  SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
+  SOLS_DISABLE=1, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
   LASER_DISABLE, LASER_ENABLE,
   M5_STOP, M5_FORWARD, M5_REVERSE,
   TR_LATCH, TR_UNLATCH,
@@ -37,6 +39,7 @@ void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
 void SendNanoRFData(void);
+uint8_t ReadByteOrTimeout(void);
 void ConfigCmd(sub_packet_t *newCmd, uint8_t uaddr, sub_dev_cmd_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
@@ -90,30 +93,56 @@ void loop() {
 }
 
 void SendNanoRFData(void) {
-  sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-  ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
+  // sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+  // ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
   uint8_t trys = NUM_RETRYS;
   uint32_t start = micros();
-  int8_t rec = 0;
+  bool ackReceived = false;
   while (trys--) {
-    COMM_BUS.write((unsigned char *)newCmd, sizeof(sub_packet_t));
-    while (!COMM_BUS.available()) {
-      if (micros() - start >= TIMEOUT) {
-        rec = -1;
-        break;
-      }
-    }
-    if (rec > -1) {
-      rec = COMM_BUS.read();
-      if (rec == NANO_RF_UACK) {
-        LogInfo("OK\n");
-        break;
-      }
-      else if (rec == ACK_CRC_NOT_MATCHED)
-        LogInfo("crc not matched, trys %d\n", trys);
+    // send sub dev address, wait for ack before sending cmd
+    // COMM_BUS.write((unsigned char *)newCmd, 1);
+    COMM_BUS.write(NANO_RF_UADDR);
+    if (ReadByteOrTimeout() == NANO_RF_UACK) {
+      ackReceived = true;
+      break;
     }
   }
-  free(newCmd);
+  if (ackReceived) {
+    trys = NUM_RETRYS;
+    ackReceived = false;
+    while (trys--) {
+      // send sub dev command, wait for ack
+      // COMM_BUS.write((unsigned char *)(newCmd+1), 1);
+      // LogInfo("am i sending correct thing 0x%X\n", (unsigned char *)(newCmd+1));
+      COMM_BUS.write(M5_FORWARD);
+      uint8_t rec = ReadByteOrTimeout();
+      if (rec == NANO_RF_UACK) {
+        LogInfo("Tx OK\n");
+        ackReceived = true;
+        break;
+      }
+      else if (rec == ACK_CRC_NOT_MATCHED) {
+        ackReceived = true;
+        LogInfo("Tx cmd byte not handled, or not received properly\n");
+      }
+    }
+    if (!ackReceived)
+      LogInfo("dev failed to receive command\n");
+  }
+  else {
+    LogInfo("dev failed to receive addr\n");
+  }
+  // free(newCmd);
+}
+
+uint8_t ReadByteOrTimeout(void) {
+  uint32_t start = micros();
+  while (!COMM_BUS.available()) {
+    if (micros() - start >= TIMEOUT) {
+      return 0;
+    }
+  }
+  return COMM_BUS.read();
 }
 
 /** 

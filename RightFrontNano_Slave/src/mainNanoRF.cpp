@@ -9,6 +9,9 @@
 #define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
 #define ACK_CRC_NOT_MATCHED 0x4E
 
+#define NUM_RETRYS 2
+#define TIMEOUT 20 // us
+
 // all sub devices receive commands in the format of this typedef
 typedef struct {
   uint8_t devAddr;
@@ -16,9 +19,12 @@ typedef struct {
   uint16_t crc;
 } sub_packet_t;
 
-// commands sent from master board
+/** 
+ * commands sent from master board
+ * @note: start cmd at 1 since timeout response is 0
+ */
 typedef enum {
-  SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
+  SOLS_DISABLE=1, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
   LASER_DISABLE, LASER_ENABLE,
   M5_STOP, M5_FORWARD, M5_REVERSE,
   TR_LATCH, TR_UNLATCH,
@@ -27,6 +33,7 @@ typedef enum {
 
 void InitRoboclaw(void);
 void RecMasterData(void);
+uint8_t ReadByteOrTimeout(void);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 #define ROBOCLAW_ADDRESS 0x80
@@ -35,7 +42,6 @@ RoboClaw rclaw(&rclawSerial, 3500); // note: timeout is in microseconds
 
 SoftwareSerial masterSerial(3, 2); // Rx, Tx - master board serial port
 
-uint8_t rec, send;
 float testFloat;
 unsigned long curTime = 0;
 static unsigned long preTime = 0;
@@ -51,13 +57,30 @@ void setup() {
 
 void loop() {
   curTime = millis();
-  RecMasterData();
-  // if (masterSerial.available()) {
-  //   sub_packet_t *recCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-  //   masterSerial.readBytes((uint8_t *)recCmd, sizeof(sub_packet_t));
-  //   LogInfo(F("addr 0x%X, cmd 0x%X, crc 0x%X\n"), recCmd->devAddr, recCmd->command, recCmd->crc);
-  //   free(recCmd);
-  // }
+  // RecMasterData();
+  if (masterSerial.available()) {
+    uint8_t rec;
+    rec = masterSerial.read();
+    if (rec == NANO_RF_UADDR) {
+      masterSerial.write(NANO_RF_UACK);
+      uint8_t trys = NUM_RETRYS;
+      while (trys--) {
+        // wait for command
+        rec = ReadByteOrTimeout();
+        LogInfo("rec 0x%X\n", rec);
+        if (rec > 0) {
+          switch (rec) {
+            case M5_FORWARD:
+              masterSerial.write(NANO_RF_UACK);
+              break;
+            default:
+              masterSerial.write(ACK_CRC_NOT_MATCHED); // NOTE: name should change to ACK_CMD_NOT_HANDLED
+              break;
+          }
+        }
+      }
+    }
+  }
   // else {
   //   // LogInfo("no data available\n");
   // }
@@ -108,6 +131,16 @@ void RecMasterData(void) {
     }
     free(recCmd);
   }
+}
+
+uint8_t ReadByteOrTimeout(void) {
+  uint32_t start = micros();
+  while (!masterSerial.available()) {
+    if (micros() - start >= TIMEOUT) {
+      return 0;
+    }
+  }
+  return masterSerial.read();
 }
 
 void InitRoboclaw(void) {
