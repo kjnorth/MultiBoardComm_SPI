@@ -10,17 +10,26 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
-#define NANO_RF Serial1
+#define COMM_BUS Serial1
 #define NANO_RF_UADDR 0xE9 // nano right front unique address
 #define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
+#define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
 
 #define M5_STOP_CMD 0xF0
 #define M5_FORWARD_CMD 0xF1
 #define M5_REVERSE_CMD 0xF2
 
+// all sub devices receive commands in the format of this typedef
+typedef struct {
+  uint8_t devAddr;
+  uint8_t command;
+  uint16_t crc;
+} sub_cmd_t;
+
 void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
+void ConfigCmd(sub_cmd_t *newCmd, uint8_t addr, uint8_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 TX_TO_RX ttr;
@@ -28,9 +37,8 @@ RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 
 void setup() {
   Serial.begin(115200);
-  NANO_RF.begin(115200);
+  COMM_BUS.begin(115200);
   LogInfo("Master boots up\n");
-  
   InitRadio();
 }
 
@@ -42,25 +50,26 @@ static RX_TO_TX rtt;
 void loop() {
   curTime = millis();
 
-  static uint8_t send = 0xA0;
-  static uint8_t rec = 0x00;
+  static bool cmdReceived = false;
   IsConnected();
   if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
     // truck comm
     UpdateTruckData();
     // right front nano comm
-    if (NANO_RF.availableForWrite()) {
-      // write 1 byte ADDR, 1 byte CMD
-      unsigned char buf[3];
-      buf[0] = NANO_RF_UADDR; buf[1] = M5_FORWARD_CMD;
-      uint16_t crc = GetCRC16(buf, 2);
-      buf[3] = crc;
-      NANO_RF.write(buf, 3);
+    if (COMM_BUS.availableForWrite() && !cmdReceived) { // TODO: ADD motor stop btn!
+      sub_cmd_t *newCmd = (sub_cmd_t*)malloc(sizeof(sub_cmd_t));
+      newCmd->devAddr = NANO_RF_UADDR;
+      newCmd->command = M5_FORWARD_CMD;
+      newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_cmd_t)-2);
+      COMM_BUS.write((unsigned char *)newCmd, sizeof(sub_cmd_t));
+      free(newCmd);
+
       unsigned long t = micros();
-      while (!NANO_RF.available()) {};
-      uint8_t recByte = NANO_RF.read();
+      while (!COMM_BUS.available()) {};
+      uint8_t recByte = COMM_BUS.read();
       if (recByte == NANO_RF_UACK) {
         LogInfo("transmission OK - respond time %lu\n", micros()-t);
+        cmdReceived = true;
       }
       else {
         LogInfo("ERROR - incorrect byte received!\n");
@@ -74,13 +83,28 @@ void loop() {
   float receivedFloat = (float)(ires/1000.0);
   if (curTime - preLogTime >= 1000) {
     LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d, "),
-                rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected(), rec);
+                rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
     LogInfo("received float ", receivedFloat, 3, true);
     preLogTime = curTime;
   }
+}
+
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-19 09:31:10 
+ * @Desc: sets newCmd member variables and computes crc
+ * @p 
+ */
+
+void ConfigCmd(sub_cmd_t *newCmd, uint8_t addr, uint8_t cmdByte) {
 
 }
 
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-19 08:52:33 
+ * @Desc: Initializes the NRF24L01 module that communicates with the truck 
+ */
 void InitRadio(void) {
   ttr.Phase = 0xA4;
   ttr.LEDControl = 0xB7;
