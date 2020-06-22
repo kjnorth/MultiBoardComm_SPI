@@ -10,13 +10,15 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
+#define TX_BTN_IN 5
 #define COMM_BUS Serial1
 // NOTE: if you throw these in an enum, make sure to start it at 1!!!! or greater since cmds start at 1
 #define NANO_RF_UADDR 0xE9 // nano right front unique address
 #define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
-#define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
-#define NUM_RETRYS 2
-#define TX_TIMEOUT_US 25 // microseconds
+#define ACK_CMD_NOT_HANDLED 0x83 // any sub device will respond with this byte if cmd isn't handled
+#define ACK_CRC_NOT_MATCHED 0xD7 // any sub device will respond with this byte if the crc doesn't match
+#define NUM_RETRYS 3
+#define TX_TIMEOUT_US 500 // microseconds
 
 // all sub devices receive commands in the format of this typedef
 typedef struct {
@@ -24,10 +26,6 @@ typedef struct {
   uint8_t command;
   uint16_t crc;
 } sub_packet_t;
-// sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-// ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
-// do stuff
-// free(newCmd);
 
 // start cmd at 1 since timeout response is 0
 typedef enum {
@@ -38,13 +36,18 @@ typedef enum {
   GET_PITCH, GET_ROLL, GET_SOL_STATUS, GET_SW_STATUS,
 } sub_dev_cmd_t;
 
+typedef enum {
+  ERROR, CRC_ERROR, CMD_ERROR, SUCCESS,
+} sub_dev_response_t;
+
 void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
-void SendNanoRFData(void);
-uint8_t ReadByteOrTimeout(uint8_t timeoutUs); // timeout in microseconds
-void ConfigCmd(sub_packet_t *newCmd, uint8_t uAddr, sub_dev_cmd_t cmdByte);
+sub_dev_response_t WriteSubDevCmd(uint8_t uAddr, sub_dev_cmd_t cmd);
+uint8_t ReadByteOrTimeout(uint16_t timeoutUs); // timeout in microseconds
+void ConfigPacket(sub_packet_t *newCmd, uint8_t uAddr, sub_dev_cmd_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
+bool isTxBtnPressedEvent(void);
 
 TX_TO_RX ttr;
 RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
@@ -53,21 +56,8 @@ void setup() {
   Serial.begin(115200);
   COMM_BUS.begin(115200);
   LogInfo("Master boots up\n");
+  pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
-
-  sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-  ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
-  // do stuff
-  // uint32_t start = micros();
-  // uint16_t crc = GetCRC16((unsigned char *)newCmd, 2);
-  // uint32_t finis = micros();
-  // LogInfo("time to get crc %lu\n", finis-start);
-
-  // will want to copy newCmd in buf like this to send each byte individually
-  // unsigned char *buf = (unsigned char *)newCmd;
-  // uint16_t crcConstruct = (uint16_t)(*(buf+2) | (*(buf+3)<<8));
-  // LogInfo(F("test1 0x%X 0x%X 0x%X\n"), *buf, *(buf+1), crcConstruct);
-  free(newCmd);
 }
 
 unsigned long curTime = 0;
@@ -78,86 +68,71 @@ static RX_TO_TX rtt;
 void loop() {
   curTime = millis();
 
-  static bool cmdReceived = false;
   IsConnected();
   if (curTime - preSendTime >= 100) { // write data to truck PRX at 100Hz frequency
     // truck comm
-    UpdateTruckData();
+    // UpdateTruckData();
     // right front nano comm
-    SendNanoRFData();
+    if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
+      sub_dev_response_t result = WriteSubDevCmd(NANO_RF_UADDR, M5_FORWARD);
+      switch (result) {
+        case ERROR:
+          LogInfo("Tx ERROR\n");
+          break;
+        case SUCCESS:
+          LogInfo("Tx SUCCESS\n");
+          break;
+        case CMD_ERROR:
+          LogInfo("Tx CMD ERROR\n");
+          break;
+        case CRC_ERROR:
+          LogInfo("Tx CRC ERROR\n");
+          break;
+      }
+    }
     preSendTime = curTime;
   }
 
   if (curTime - preLogTime >= 1000) {
     // LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
     //             rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
+    COMM_BUS.availableForWrite();
     preLogTime = curTime;
   }
 }
 
-void SendNanoRFData(void) {
-  // test vars
-  static int count = 0;
-  static int addrSuccesses = 0;
-  static int cmdSuccesses = 0;
-  static int cmdCorrupts = 0;
-  static int cmdFails = 0;
-  static int addrFails = 0;
-  static int addrTrys = 0;
-  static int cmdTrys = 0;
-  // *********
-
-  uint32_t txStart = micros();
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-22 11:34:59 
+ * @Desc: writes a command to a sub device
+ * @Param - uAddr: device unique address
+ * @Param - cmd: the command being sent
+ */
+sub_dev_response_t WriteSubDevCmd(uint8_t uAddr, sub_dev_cmd_t cmd) {
+  sub_packet_t *packet = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+  ConfigPacket(packet, uAddr, cmd);
+  uint8_t rec = 0; // the byte received from sub device
   uint8_t trys = NUM_RETRYS;
-  bool ackReceived = false;
-  bool ok = false;
-  while (trys--) {
-    addrTrys++;
-    // send sub dev address, wait for ack before sending cmd
-    COMM_BUS.write(NANO_RF_UADDR);
-    if (ReadByteOrTimeout(TX_TIMEOUT_US) == NANO_RF_UACK) {
-      addrSuccesses++;
-      ackReceived = true;
-      break;
-    }
-  }
-  if (ackReceived) {
-    trys = NUM_RETRYS;
-    ackReceived = false;
-    while (trys--) {
-      cmdTrys++;
-      // send sub dev command, wait for ack
-      COMM_BUS.write(M5_FORWARD);
-      uint8_t rec = ReadByteOrTimeout(TX_TIMEOUT_US);
-      if (rec == NANO_RF_UACK) {
-        // LogInfo("Tx OK\n");
-        cmdSuccesses++;
-        ok = true;
-        ackReceived = true;
+  sub_dev_response_t result = ERROR; // default to no response ERROR
+  // if no response, or CRC doesn't match, keep trying
+  while (trys-- && (result <= CRC_ERROR)) {
+    COMM_BUS.write((unsigned char *)packet, sizeof(sub_packet_t));
+    rec = ReadByteOrTimeout(TX_TIMEOUT_US);
+    LogInfo("rec 0x%X ", rec);
+    switch (rec) {
+      case NANO_RF_UACK:
+        result = SUCCESS;
         break;
-      }
-      else if (rec == ACK_CMD_NOT_HANDLED) {
-        ackReceived = true;
-        cmdCorrupts++;
-      }
-    }
-    if (!ackReceived) {
-      cmdFails++;
+      case ACK_CMD_NOT_HANDLED:
+        result = CMD_ERROR;
+        break;
+      case ACK_CRC_NOT_MATCHED:
+        result = CRC_ERROR;
+        break;
     }
   }
-  else {
-    addrFails++;
-  }
-  count++;
-  // if (count % 100 == 0) {
-  //   if (ok) {
-  //     LogInfo("good tx time us %lu\n", micros()-txStart);
-  //   }
-  //   LogInfo(F("addrSuccesses %d, cmdSuccesses %d, errors: cmdCorrupts %d, cmdFails %d, addrFails %d, trys: addrTrys %d, cmdTrys %d\n"),
-  //             addrSuccesses, cmdSuccesses, cmdCorrupts, cmdFails, addrFails, addrTrys, cmdTrys);
-  //   count = 0;
-  //   addrSuccesses = 0; cmdSuccesses = 0; cmdCorrupts = 0; cmdFails = 0; addrFails = 0; addrTrys = 0; cmdTrys = 0;
-  // }
+  free(packet);
+  return result;
 }
 
 /** 
@@ -167,7 +142,7 @@ void SendNanoRFData(void) {
  * @Param - timeoutUs: the timeout duration in us
  * @Return: byte read, or 0 if timeout
  */
-uint8_t ReadByteOrTimeout(uint8_t timeoutUs) {
+uint8_t ReadByteOrTimeout(uint16_t timeoutUs) {
   uint32_t start = micros();
   while (!COMM_BUS.available()) {
     if (micros() - start >= timeoutUs) {
@@ -185,7 +160,7 @@ uint8_t ReadByteOrTimeout(uint8_t timeoutUs) {
  * @Param - addr: unique address of sub device
  * @Param - cmdByte: byte corresponding to sub device command
  */
-void ConfigCmd(sub_packet_t *newCmd, uint8_t uAddr, sub_dev_cmd_t cmdByte) {
+void ConfigPacket(sub_packet_t *newCmd, uint8_t uAddr, sub_dev_cmd_t cmdByte) {
   newCmd->devAddr = uAddr;
   newCmd->command = cmdByte;
   newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_packet_t)-2);
@@ -274,4 +249,32 @@ uint16_t GetCRC16(unsigned char *buf, int nBytes) {
 		}
 	}
  	return crc;
+}
+
+bool isTxBtnPressedEvent(void) {
+  uint8_t status = 0;
+  static uint8_t preStatus = 0;
+  uint8_t event = 0;
+  static uint8_t preEvent = 0;
+  bool returnVal = false;
+
+  status = !digitalRead(TX_BTN_IN); // negate since low side switch
+  if (status & preStatus) { // btn pressed for 2 cycles
+    event = 1;
+  }
+  else if (~status & ~preStatus) { // btn released for 2 cycles
+    event = 0;
+  }
+  preStatus = status;
+
+  if (event != preEvent) {
+    if (event == 1) // only return true on event when btn is pressed
+      returnVal = true;
+    preEvent = event;
+  }
+  else {
+    returnVal = false;
+  }
+
+  return returnVal;
 }

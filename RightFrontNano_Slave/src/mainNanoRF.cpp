@@ -6,7 +6,8 @@
 
 #define NANO_RF_UADDR 0xE9 // nano right front unique address
 #define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
-#define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
+#define ACK_CMD_NOT_HANDLED 0x83 // any sub device will respond with this byte if cmd isn't handled
+#define ACK_CRC_NOT_MATCHED 0xD7 // any sub device will respond with this byte if the crc doesn't match
 
 #define NUM_RETRYS 2
 #define TIMEOUT 20 // us
@@ -32,7 +33,6 @@ typedef enum {
 
 void InitRoboclaw(void);
 void RecMasterData(void);
-uint8_t ReadByteOrTimeout(void);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 #define ROBOCLAW_ADDRESS 0x80
@@ -47,56 +47,41 @@ static unsigned long preTime = 0;
 
 #define TEST 0
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   masterSerial.begin(115200);
-  LogInfo("Right Front Nano software begins\n");
+  /** NOTE: Only ONE software serial port can be listening at a time,
+   * so must start rclaw port listening when asking for encoders / 
+   * motor current etc */
+  masterSerial.listen();
+  LogInfo("Right Front Nano software begins\r\n");
 //   InitRoboclaw();
   testFloat = -2.464;
 }
 
 void loop() {
   curTime = millis();
-  // RecMasterData();
-  if (masterSerial.available()) {
-    uint8_t rec;
-    rec = masterSerial.read();
-    if (rec == NANO_RF_UADDR) {
-      masterSerial.write(NANO_RF_UACK);
-      uint8_t trys = NUM_RETRYS;
-      while (trys--) {
-        // wait for command
-        rec = ReadByteOrTimeout();
-        if (rec > 0) {
-          switch (rec) {
-            case M5_FORWARD:
-              masterSerial.write(NANO_RF_UACK);
-              break;
-            default:
-              masterSerial.write(ACK_CMD_NOT_HANDLED);
-              break;
-          }
-        }
-      }
-    }
-  }
+  RecMasterData();
 
   if (curTime - preTime >= 1000) {
     preTime = curTime;
-    // LogInfo("byte received 0x%X\n", rec);
+    // LogInfo("byte received 0x%X\r\n", rec);
     testFloat += 0.001;
   }
 }
 
 void RecMasterData(void) {
+  static int count = 0;
   if (masterSerial.available()) {
-    sub_packet_t *recCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-    masterSerial.readBytes((uint8_t *)recCmd, sizeof(sub_packet_t));
-    uint16_t crcCalc = GetCRC16((unsigned char *)recCmd, 2);
-    if (crcCalc == recCmd->crc) {
+    sub_packet_t *packet = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+    masterSerial.readBytes((uint8_t *)packet, sizeof(sub_packet_t));
+    uint16_t crcCalc = GetCRC16((unsigned char *)packet, 2);
+    count++;
+    // LogInfo(F("packet received 0x%X 0x%X count %d\r\n"), packet->devAddr, packet->command, count);
+    if (crcCalc == packet->crc) {
       // got uncorrupted data
-      if (recCmd->devAddr == NANO_RF_UADDR) {
+      if (packet->devAddr == NANO_RF_UADDR) {
         // cmd packet sent to this device
-        switch (recCmd->command) {
+        switch (packet->command) {
           case M5_STOP:
             // rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
             masterSerial.write(NANO_RF_UACK);
@@ -114,26 +99,13 @@ void RecMasterData(void) {
             break;
         }
       }
-      else {
-          LogInfo("wrong dev addr\n");
-      }
+      // else {} // wrong dev address, do nothing
     }
     else {
-      // LogInfo("crc not match\n");
-      masterSerial.write(ACK_CMD_NOT_HANDLED);
+      masterSerial.write(ACK_CRC_NOT_MATCHED);
     }
-    free(recCmd);
+    free(packet);
   }
-}
-
-uint8_t ReadByteOrTimeout(void) {
-  uint32_t start = micros();
-  while (!masterSerial.available()) {
-    if (micros() - start >= TIMEOUT) {
-      return 0;
-    }
-  }
-  return masterSerial.read();
 }
 
 void InitRoboclaw(void) {
@@ -146,17 +118,17 @@ void InitRoboclaw(void) {
 	// set maximum current limits to 45 amps
 	if (!rclaw.SetM1MaxCurrent(ROBOCLAW_ADDRESS, 4500) ||
 		!rclaw.SetM2MaxCurrent(ROBOCLAW_ADDRESS, 4500))
-		LogInfo("Error setting RCLAW max currents\n");
+		LogInfo("Error setting RCLAW max currents\r\n");
 	uint32_t m1MaxCurrent, m2MaxCurrent;
 	if (!rclaw.ReadM1MaxCurrent(ROBOCLAW_ADDRESS, m1MaxCurrent) ||
 		!rclaw.ReadM2MaxCurrent(ROBOCLAW_ADDRESS, m2MaxCurrent) ||
 		!rclaw.ReadVersion(ROBOCLAW_ADDRESS, version))
-		LogInfo("Error reading RCLAW data\n");
+		LogInfo("Error reading RCLAW data\r\n");
 	else {
 		LogInfo(F("RoboClaw max currents, M1 %u [A] "),
 							m1MaxCurrent/100);
 		LogInfo(F("M2 %u [A], "), m2MaxCurrent/100);
-		LogInfo(F("firmware version is %s\n"), version);
+		LogInfo(F("firmware version is %s\r\n"), version);
 		rclaw.SetM1DefaultAccel(ROBOCLAW_ADDRESS, 0xF);
 		rclaw.SetM2DefaultAccel(ROBOCLAW_ADDRESS, 0xF);
 	}
