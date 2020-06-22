@@ -7,7 +7,6 @@
 #define NANO_RF_UADDR 0xE9 // nano right front unique address
 #define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
 #define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
-#define ACK_CRC_NOT_MATCHED 0x4E
 
 #define NUM_RETRYS 2
 #define TIMEOUT 20 // us
@@ -67,25 +66,19 @@ void loop() {
       while (trys--) {
         // wait for command
         rec = ReadByteOrTimeout();
-        LogInfo("rec 0x%X\n", rec);
         if (rec > 0) {
           switch (rec) {
             case M5_FORWARD:
               masterSerial.write(NANO_RF_UACK);
               break;
             default:
-              masterSerial.write(ACK_CRC_NOT_MATCHED); // NOTE: name should change to ACK_CMD_NOT_HANDLED
+              masterSerial.write(ACK_CMD_NOT_HANDLED);
               break;
           }
         }
       }
     }
   }
-  // else {
-  //   // LogInfo("no data available\n");
-  // }
-
-  // delay(100);
 
   if (curTime - preTime >= 1000) {
     preTime = curTime;
@@ -127,7 +120,7 @@ void RecMasterData(void) {
     }
     else {
       // LogInfo("crc not match\n");
-      masterSerial.write(ACK_CRC_NOT_MATCHED);
+      masterSerial.write(ACK_CMD_NOT_HANDLED);
     }
     free(recCmd);
   }

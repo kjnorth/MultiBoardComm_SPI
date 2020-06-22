@@ -15,9 +15,8 @@
 #define NANO_RF_UADDR 0xE9 // nano right front unique address
 #define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
 #define ACK_CMD_NOT_HANDLED 0x3D // any sub device will respond with this byte if cmd isn't handled
-#define ACK_CRC_NOT_MATCHED 0x4E
 #define NUM_RETRYS 2
-#define TIMEOUT 20 // us
+#define TX_TIMEOUT_US 25 // microseconds
 
 // all sub devices receive commands in the format of this typedef
 typedef struct {
@@ -25,6 +24,10 @@ typedef struct {
   uint8_t command;
   uint16_t crc;
 } sub_packet_t;
+// sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+// ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
+// do stuff
+// free(newCmd);
 
 // start cmd at 1 since timeout response is 0
 typedef enum {
@@ -39,8 +42,8 @@ void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
 void SendNanoRFData(void);
-uint8_t ReadByteOrTimeout(void);
-void ConfigCmd(sub_packet_t *newCmd, uint8_t uaddr, sub_dev_cmd_t cmdByte);
+uint8_t ReadByteOrTimeout(uint8_t timeoutUs); // timeout in microseconds
+void ConfigCmd(sub_packet_t *newCmd, uint8_t uAddr, sub_dev_cmd_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 TX_TO_RX ttr;
@@ -51,6 +54,20 @@ void setup() {
   COMM_BUS.begin(115200);
   LogInfo("Master boots up\n");
   InitRadio();
+
+  sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
+  ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
+  // do stuff
+  // uint32_t start = micros();
+  // uint16_t crc = GetCRC16((unsigned char *)newCmd, 2);
+  // uint32_t finis = micros();
+  // LogInfo("time to get crc %lu\n", finis-start);
+
+  // will want to copy newCmd in buf like this to send each byte individually
+  // unsigned char *buf = (unsigned char *)newCmd;
+  // uint16_t crcConstruct = (uint16_t)(*(buf+2) | (*(buf+3)<<8));
+  // LogInfo(F("test1 0x%X 0x%X 0x%X\n"), *buf, *(buf+1), crcConstruct);
+  free(newCmd);
 }
 
 unsigned long curTime = 0;
@@ -62,47 +79,44 @@ void loop() {
   curTime = millis();
 
   static bool cmdReceived = false;
-  static unsigned long t = 0;
-  static int i = 0;
   IsConnected();
   if (curTime - preSendTime >= 100) { // write data to truck PRX at 100Hz frequency
     // truck comm
     UpdateTruckData();
     // right front nano comm
     SendNanoRFData();
-    // if (COMM_BUS.availableForWrite()) {
-    //   COMM_BUS.write(NANO_RF_UADDR);
-    //   t = micros();
-    // }
-    // if (COMM_BUS.available()) {
-    //   uint8_t rec = COMM_BUS.read();
-    //   LogInfo(F("rec 0x%X, respond time %lu, index %d\n"), rec, micros()-t, i);
-    // }
     preSendTime = curTime;
   }
-  i++;
 
-  int32_t ires = 0;
-  float receivedFloat = (float)(ires/1000.0);
   if (curTime - preLogTime >= 1000) {
-    LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d, "),
-                rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
-    LogInfo("received float ", receivedFloat, 3, true);
+    // LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
+    //             rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
     preLogTime = curTime;
   }
 }
 
 void SendNanoRFData(void) {
-  // sub_packet_t *newCmd = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-  // ConfigCmd(newCmd, NANO_RF_UADDR, M5_FORWARD);
+  // test vars
+  static int count = 0;
+  static int addrSuccesses = 0;
+  static int cmdSuccesses = 0;
+  static int cmdCorrupts = 0;
+  static int cmdFails = 0;
+  static int addrFails = 0;
+  static int addrTrys = 0;
+  static int cmdTrys = 0;
+  // *********
+
+  uint32_t txStart = micros();
   uint8_t trys = NUM_RETRYS;
-  uint32_t start = micros();
   bool ackReceived = false;
+  bool ok = false;
   while (trys--) {
+    addrTrys++;
     // send sub dev address, wait for ack before sending cmd
-    // COMM_BUS.write((unsigned char *)newCmd, 1);
     COMM_BUS.write(NANO_RF_UADDR);
-    if (ReadByteOrTimeout() == NANO_RF_UACK) {
+    if (ReadByteOrTimeout(TX_TIMEOUT_US) == NANO_RF_UACK) {
+      addrSuccesses++;
       ackReceived = true;
       break;
     }
@@ -111,34 +125,52 @@ void SendNanoRFData(void) {
     trys = NUM_RETRYS;
     ackReceived = false;
     while (trys--) {
+      cmdTrys++;
       // send sub dev command, wait for ack
-      // COMM_BUS.write((unsigned char *)(newCmd+1), 1);
-      // LogInfo("am i sending correct thing 0x%X\n", (unsigned char *)(newCmd+1));
       COMM_BUS.write(M5_FORWARD);
-      uint8_t rec = ReadByteOrTimeout();
+      uint8_t rec = ReadByteOrTimeout(TX_TIMEOUT_US);
       if (rec == NANO_RF_UACK) {
-        LogInfo("Tx OK\n");
+        // LogInfo("Tx OK\n");
+        cmdSuccesses++;
+        ok = true;
         ackReceived = true;
         break;
       }
-      else if (rec == ACK_CRC_NOT_MATCHED) {
+      else if (rec == ACK_CMD_NOT_HANDLED) {
         ackReceived = true;
-        LogInfo("Tx cmd byte not handled, or not received properly\n");
+        cmdCorrupts++;
       }
     }
-    if (!ackReceived)
-      LogInfo("dev failed to receive command\n");
+    if (!ackReceived) {
+      cmdFails++;
+    }
   }
   else {
-    LogInfo("dev failed to receive addr\n");
+    addrFails++;
   }
-  // free(newCmd);
+  count++;
+  // if (count % 100 == 0) {
+  //   if (ok) {
+  //     LogInfo("good tx time us %lu\n", micros()-txStart);
+  //   }
+  //   LogInfo(F("addrSuccesses %d, cmdSuccesses %d, errors: cmdCorrupts %d, cmdFails %d, addrFails %d, trys: addrTrys %d, cmdTrys %d\n"),
+  //             addrSuccesses, cmdSuccesses, cmdCorrupts, cmdFails, addrFails, addrTrys, cmdTrys);
+  //   count = 0;
+  //   addrSuccesses = 0; cmdSuccesses = 0; cmdCorrupts = 0; cmdFails = 0; addrFails = 0; addrTrys = 0; cmdTrys = 0;
+  // }
 }
 
-uint8_t ReadByteOrTimeout(void) {
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-22 09:40:27 
+ * @Desc: reads a byte if available in the timeout duration
+ * @Param - timeoutUs: the timeout duration in us
+ * @Return: byte read, or 0 if timeout
+ */
+uint8_t ReadByteOrTimeout(uint8_t timeoutUs) {
   uint32_t start = micros();
   while (!COMM_BUS.available()) {
-    if (micros() - start >= TIMEOUT) {
+    if (micros() - start >= timeoutUs) {
       return 0;
     }
   }
@@ -153,8 +185,8 @@ uint8_t ReadByteOrTimeout(void) {
  * @Param - addr: unique address of sub device
  * @Param - cmdByte: byte corresponding to sub device command
  */
-void ConfigCmd(sub_packet_t *newCmd, uint8_t uaddr, sub_dev_cmd_t cmdByte) {
-  newCmd->devAddr = uaddr;
+void ConfigCmd(sub_packet_t *newCmd, uint8_t uAddr, sub_dev_cmd_t cmdByte) {
+  newCmd->devAddr = uAddr;
   newCmd->command = cmdByte;
   newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_packet_t)-2);
 }
