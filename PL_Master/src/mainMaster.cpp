@@ -12,11 +12,10 @@
 
 #define TX_BTN_IN 5
 #define COMM_BUS Serial1
-// NOTE: if you throw these in an enum, make sure to start it at 1!!!! or greater since cmds start at 1
-#define NANO_RF_UADDR 0xE9 // nano right front unique address
-#define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
-#define ACK_CMD_NOT_HANDLED 0x83 // any sub device will respond with this byte if cmd isn't handled
-#define ACK_CRC_NOT_MATCHED 0xD7 // any sub device will respond with this byte if the crc doesn't match
+#define NANO_RF_UADDR 0xE9 // unique address of the right front sub board // NOTE: will remove once SS lines added
+#define ACK_SUCCESS 0x5F // universal acknowledgement from sub devices
+#define ACK_CMD_NOT_HANDLED 0x83 // universal ack if command isn't handled
+#define ACK_CRC_NOT_MATCHED 0xD7 // universal ack if CRC doesn't match
 #define NUM_RETRYS 3
 #define TX_TIMEOUT_US 500 // microseconds
 
@@ -96,7 +95,6 @@ void loop() {
   if (curTime - preLogTime >= 1000) {
     // LogInfo(F("switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
     //             rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
-    COMM_BUS.availableForWrite();
     preLogTime = curTime;
   }
 }
@@ -118,16 +116,15 @@ sub_dev_response_t WriteSubDevCmd(uint8_t uAddr, sub_dev_cmd_t cmd) {
   while (trys-- && (result <= CRC_ERROR)) {
     COMM_BUS.write((unsigned char *)packet, sizeof(sub_packet_t));
     rec = ReadByteOrTimeout(TX_TIMEOUT_US);
-    LogInfo("rec 0x%X ", rec);
     switch (rec) {
-      case NANO_RF_UACK:
-        result = SUCCESS;
+      case ACK_CRC_NOT_MATCHED:
+        result = CRC_ERROR;
         break;
       case ACK_CMD_NOT_HANDLED:
         result = CMD_ERROR;
         break;
-      case ACK_CRC_NOT_MATCHED:
-        result = CRC_ERROR;
+      case ACK_SUCCESS:
+        result = SUCCESS;
         break;
     }
   }
@@ -196,6 +193,12 @@ void InitRadio(void) {
   }
 }
 
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-22 15:59:12 
+ * @Desc: checks if the PTX is connected to the PRX
+ * @Return: true if connected, false if not 
+ */
 bool IsConnected(void) {
   static bool conn = false;
   if (curTime - lastReceiveTime >= 250 && conn) {
@@ -209,6 +212,11 @@ bool IsConnected(void) {
   return conn;
 }
 
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-22 16:00:03 
+ * @Desc: sends/reads data to/from the truck 
+ */
 void UpdateTruckData(void) {
 #ifdef RF_USE_IRQ_PIN  
   if (LOW == digitalRead(RF_IRQ_PIN)) {

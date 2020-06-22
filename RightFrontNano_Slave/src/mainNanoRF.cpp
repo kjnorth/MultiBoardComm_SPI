@@ -4,10 +4,10 @@
 #include "..\lib\DataLog\DataLog.h"
 #include "..\lib\RoboClaw\RoboClaw.h"
 
-#define NANO_RF_UADDR 0xE9 // nano right front unique address
-#define NANO_RF_UACK 0x5F // nano right front unique acknowledgement
-#define ACK_CMD_NOT_HANDLED 0x83 // any sub device will respond with this byte if cmd isn't handled
-#define ACK_CRC_NOT_MATCHED 0xD7 // any sub device will respond with this byte if the crc doesn't match
+#define NANO_RF_UADDR 0xE9 // unique address of the right front sub board
+#define ACK_SUCCESS 0x5F // universal acknowledgement from sub devices
+#define ACK_CMD_NOT_HANDLED 0x83 // universal ack if command isn't handled
+#define ACK_CRC_NOT_MATCHED 0xD7 // universal ack if CRC doesn't match
 
 #define NUM_RETRYS 2
 #define TIMEOUT 20 // us
@@ -32,7 +32,7 @@ typedef enum {
 } sub_dev_cmd_t;
 
 void InitRoboclaw(void);
-void RecMasterData(void);
+void ReadMasterCmd(void);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 #define ROBOCLAW_ADDRESS 0x80
@@ -55,28 +55,28 @@ void setup() {
   masterSerial.listen();
   LogInfo("Right Front Nano software begins\r\n");
 //   InitRoboclaw();
-  testFloat = -2.464;
 }
 
 void loop() {
   curTime = millis();
-  RecMasterData();
+  ReadMasterCmd();
 
   if (curTime - preTime >= 1000) {
     preTime = curTime;
     // LogInfo("byte received 0x%X\r\n", rec);
-    testFloat += 0.001;
   }
 }
 
-void RecMasterData(void) {
-  static int count = 0;
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-22 15:56:09 
+ * @Desc: retrieves commands from the master board 
+ */
+void ReadMasterCmd(void) {
   if (masterSerial.available()) {
     sub_packet_t *packet = (sub_packet_t*)malloc(sizeof(sub_packet_t));
     masterSerial.readBytes((uint8_t *)packet, sizeof(sub_packet_t));
-    uint16_t crcCalc = GetCRC16((unsigned char *)packet, 2);
-    count++;
-    // LogInfo(F("packet received 0x%X 0x%X count %d\r\n"), packet->devAddr, packet->command, count);
+    uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(sub_packet_t)-2);
     if (crcCalc == packet->crc) {
       // got uncorrupted data
       if (packet->devAddr == NANO_RF_UADDR) {
@@ -84,15 +84,15 @@ void RecMasterData(void) {
         switch (packet->command) {
           case M5_STOP:
             // rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
-            masterSerial.write(NANO_RF_UACK);
+            masterSerial.write(ACK_SUCCESS);
             break;
           case M5_FORWARD:
             // rclaw.ForwardM2(ROBOCLAW_ADDRESS, 25);
-            masterSerial.write(NANO_RF_UACK);
+            masterSerial.write(ACK_SUCCESS);
             break;
           case M5_REVERSE:
             // rclaw.BackwardM2(ROBOCLAW_ADDRESS, 25);
-            masterSerial.write(NANO_RF_UACK);
+            masterSerial.write(ACK_SUCCESS);
             break;
           default:
             masterSerial.write(ACK_CMD_NOT_HANDLED);
@@ -108,6 +108,11 @@ void RecMasterData(void) {
   }
 }
 
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-22 15:55:08 
+ * @Desc: initializes the roboclaw motor controller 
+ */
 void InitRoboclaw(void) {
   char version[256] = {0};
   rclaw.begin(57600);
