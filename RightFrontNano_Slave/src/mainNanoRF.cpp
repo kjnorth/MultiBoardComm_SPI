@@ -4,24 +4,31 @@
 #include "..\lib\DataLog\DataLog.h"
 #include "..\lib\RoboClaw\RoboClaw.h"
 
+#define SUB_DEV_TX_PIN 2
+#define SUB_DEV_RX_PIN 3
+#define SUB_DEV_SS_PIN 4
+#define SUB_DEV_IRQ_PIN 5
+
+#define ROBOCLAW_ADDRESS 0x80
+#define ROBOCLAW_TIMEOUT_US 3500 // microseconds
+#define ROBOCLAW_TX_PIN 6
+#define ROBOCLAW_RX_PIN 7
+
 #define NANO_RF_UADDR 0xE9 // unique address of the right front sub board
 #define ACK_SUCCESS 0x5F // universal acknowledgement from sub devices
 #define ACK_CMD_NOT_HANDLED 0x83 // universal ack if command isn't handled
 #define ACK_CRC_NOT_MATCHED 0xD7 // universal ack if CRC doesn't match
 
-#define NUM_RETRYS 2
-#define TIMEOUT 20 // us
-
 // all sub devices receive commands in the format of this typedef
 typedef struct {
-  uint8_t devAddr;
   uint8_t command;
   uint16_t crc;
-} sub_packet_t;
+} sub_dev_packet_t;
 
 /** 
  * commands sent from master board
  * @note: start cmd at 1 since timeout response is 0
+ * @todo: make #define for cmd set if front board or rear board in config file
  */
 typedef enum {
   SOLS_DISABLE=1, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
@@ -35,11 +42,10 @@ void InitRoboclaw(void);
 void ReadMasterCmd(void);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
-#define ROBOCLAW_ADDRESS 0x80
-SoftwareSerial rclawSerial(5, 4); // Rx, Tx - roboclaw serial port
-RoboClaw rclaw(&rclawSerial, 3500); // note: timeout is in microseconds
+SoftwareSerial rclawSerial(ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN); // Rx, Tx - roboclaw serial port
+RoboClaw rclaw(&rclawSerial, ROBOCLAW_TIMEOUT_US);
 
-SoftwareSerial masterSerial(3, 2); // Rx, Tx - master board serial port
+SoftwareSerial masterSerial(SUB_DEV_RX_PIN, SUB_DEV_TX_PIN); // Rx, Tx - master board serial bus
 
 float testFloat;
 unsigned long curTime = 0;
@@ -48,13 +54,16 @@ static unsigned long preTime = 0;
 #define TEST 0
 void setup() {
   Serial.begin(115200);
+  LogInfo("Right Front Nano software begins\r\n");
+  InitRoboclaw();
+  pinMode(SUB_DEV_SS_PIN, INPUT);
+  pinMode(SUB_DEV_IRQ_PIN, OUTPUT);
+  digitalWrite(SUB_DEV_IRQ_PIN, LOW);
   masterSerial.begin(115200);
   /** NOTE: Only ONE software serial port can be listening at a time,
    * so must start rclaw port listening when asking for encoders / 
    * motor current etc */
   masterSerial.listen();
-  LogInfo("Right Front Nano software begins\r\n");
-//   InitRoboclaw();
 }
 
 void loop() {
@@ -73,25 +82,33 @@ void loop() {
  * @Desc: retrieves commands from the master board 
  */
 void ReadMasterCmd(void) {
-  if (masterSerial.available()) {
-    sub_packet_t *packet = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-    masterSerial.readBytes((uint8_t *)packet, sizeof(sub_packet_t));
-    uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(sub_packet_t)-2);
-    if (crcCalc == packet->crc) {
-      // got uncorrupted data
-      if (packet->devAddr == NANO_RF_UADDR) {
-        // cmd packet sent to this device
+  if (digitalRead(SUB_DEV_SS_PIN) == HIGH) {
+    // communication to this device is OPEN
+    if (masterSerial.available()) {
+      // data from the master is available
+      sub_dev_packet_t *packet = (sub_dev_packet_t*)malloc(sizeof(sub_dev_packet_t));
+      masterSerial.readBytes((uint8_t *)packet, sizeof(sub_dev_packet_t));
+      uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(sub_dev_packet_t)-2);
+
+      if (crcCalc == packet->crc) {
+        // got uncorrupted data
         switch (packet->command) {
           case M5_STOP:
-            // rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
+            rclawSerial.listen();
+            rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
+            masterSerial.listen();
             masterSerial.write(ACK_SUCCESS);
             break;
           case M5_FORWARD:
-            // rclaw.ForwardM2(ROBOCLAW_ADDRESS, 25);
+            rclawSerial.listen();
+            rclaw.ForwardM2(ROBOCLAW_ADDRESS, 25);
+            masterSerial.listen();
             masterSerial.write(ACK_SUCCESS);
             break;
           case M5_REVERSE:
-            // rclaw.BackwardM2(ROBOCLAW_ADDRESS, 25);
+            rclawSerial.listen();
+            rclaw.BackwardM2(ROBOCLAW_ADDRESS, 25);
+            masterSerial.listen();
             masterSerial.write(ACK_SUCCESS);
             break;
           default:
@@ -99,13 +116,14 @@ void ReadMasterCmd(void) {
             break;
         }
       }
-      // else {} // wrong dev address, do nothing
+      else {
+        // data got corrupted
+        masterSerial.write(ACK_CRC_NOT_MATCHED);
+      }
+      free(packet);
     }
-    else {
-      masterSerial.write(ACK_CRC_NOT_MATCHED);
-    }
-    free(packet);
   }
+  // else {} // communication to this device is CLOSED
 }
 
 /** 
@@ -115,6 +133,7 @@ void ReadMasterCmd(void) {
  */
 void InitRoboclaw(void) {
   char version[256] = {0};
+  rclawSerial.listen();
   rclaw.begin(57600);
   // Note: rclaw Motor1 is the Rear Motor, Motor2 is the Front Motor
 	// send motor stop commands to be safe
@@ -134,8 +153,6 @@ void InitRoboclaw(void) {
 							m1MaxCurrent/100);
 		LogInfo(F("M2 %u [A], "), m2MaxCurrent/100);
 		LogInfo(F("firmware version is %s\r\n"), version);
-		rclaw.SetM1DefaultAccel(ROBOCLAW_ADDRESS, 0xF);
-		rclaw.SetM2DefaultAccel(ROBOCLAW_ADDRESS, 0xF);
 	}
 }
 

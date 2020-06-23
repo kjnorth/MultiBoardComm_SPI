@@ -10,21 +10,28 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
-#define TX_BTN_IN 5
+#define LF_SUB_SS_PIN 2
+#define RF_SUB_SS_PIN 3
+#define LR_SUB_SS_PIN 4
+#define RR_SUB_SS_PIN 5
+#define TX_BTN_IN 7
 #define COMM_BUS Serial1
-#define NANO_RF_UADDR 0xE9 // unique address of the right front sub board // NOTE: will remove once SS lines added
 #define ACK_SUCCESS 0x5F // universal acknowledgement from sub devices
 #define ACK_CMD_NOT_HANDLED 0x83 // universal ack if command isn't handled
 #define ACK_CRC_NOT_MATCHED 0xD7 // universal ack if CRC doesn't match
 #define NUM_RETRYS 3
-#define TX_TIMEOUT_US 500 // microseconds
+#define TIMEOUT_US_FRONT_SUB 500 // microseconds
+#define TIMEOUT_US_REAR_SUB 2000 // microseconds // longer for rear devs since they communicate with rclaws
+
+typedef enum {
+  LEFT_FRONT, RIGHT_FRONT, LEFT_REAR, RIGHT_REAR
+} sub_dev_t;
 
 // all sub devices receive commands in the format of this typedef
 typedef struct {
-  uint8_t devAddr;
   uint8_t command;
   uint16_t crc;
-} sub_packet_t;
+} sub_dev_packet_t;
 
 // start cmd at 1 since timeout response is 0
 typedef enum {
@@ -42,9 +49,11 @@ typedef enum {
 void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
-sub_dev_response_t WriteSubDevCmd(uint8_t uAddr, sub_dev_cmd_t cmd);
+sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd);
+uint16_t AssertSSLine_GetTimeout(sub_dev_t device);
+void ClearSSLine(sub_dev_t device);
 uint8_t ReadByteOrTimeout(uint16_t timeoutUs); // timeout in microseconds
-void ConfigPacket(sub_packet_t *newCmd, uint8_t uAddr, sub_dev_cmd_t cmdByte);
+void ConfigPacket(sub_dev_packet_t *newCmd, sub_dev_cmd_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 bool isTxBtnPressedEvent(void);
 
@@ -55,6 +64,14 @@ void setup() {
   Serial.begin(115200);
   COMM_BUS.begin(115200);
   LogInfo("Master boots up\n");
+  pinMode(LF_SUB_SS_PIN, OUTPUT);
+  pinMode(RF_SUB_SS_PIN, OUTPUT);
+  pinMode(LR_SUB_SS_PIN, OUTPUT);
+  pinMode(RR_SUB_SS_PIN, OUTPUT);
+  digitalWrite(LF_SUB_SS_PIN, LOW);
+  digitalWrite(RF_SUB_SS_PIN, LOW);
+  digitalWrite(LR_SUB_SS_PIN, LOW);
+  digitalWrite(RR_SUB_SS_PIN, LOW);
   pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
 }
@@ -73,8 +90,16 @@ void loop() {
     // UpdateTruckData();
     // right front nano comm
     if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
-      sub_dev_response_t result = WriteSubDevCmd(NANO_RF_UADDR, M5_FORWARD);
-      switch (result) {
+      static bool flip = true;
+      sub_dev_response_t response;
+      if (flip) {
+        response = WriteCmd(RIGHT_REAR, M5_FORWARD);
+      }
+      else {
+        response = WriteCmd(RIGHT_REAR, M5_STOP);
+      }
+      flip = !flip;
+      switch (response) {
         case ERROR:
           LogInfo("Tx ERROR\n");
           break;
@@ -103,19 +128,23 @@ void loop() {
  * @Author: Kodiak North 
  * @Date: 2020-06-22 11:34:59 
  * @Desc: writes a command to a sub device
- * @Param - uAddr: device unique address
+ * @Param - device: device to communicate with
  * @Param - cmd: the command being sent
  */
-sub_dev_response_t WriteSubDevCmd(uint8_t uAddr, sub_dev_cmd_t cmd) {
-  sub_packet_t *packet = (sub_packet_t*)malloc(sizeof(sub_packet_t));
-  ConfigPacket(packet, uAddr, cmd);
+sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd) {
+  sub_dev_packet_t *packet = (sub_dev_packet_t*)malloc(sizeof(sub_dev_packet_t));
+  ConfigPacket(packet, cmd);
   uint8_t rec = 0; // the byte received from sub device
   uint8_t trys = NUM_RETRYS;
+  uint16_t timeout = AssertSSLine_GetTimeout(device);
   sub_dev_response_t result = ERROR; // default to no response ERROR
   // if no response, or CRC doesn't match, keep trying
   while (trys-- && (result <= CRC_ERROR)) {
-    COMM_BUS.write((unsigned char *)packet, sizeof(sub_packet_t));
-    rec = ReadByteOrTimeout(TX_TIMEOUT_US);
+    COMM_BUS.write((unsigned char *)packet, sizeof(sub_dev_packet_t));
+    rec = ReadByteOrTimeout(timeout);
+    // TODO: you can make this better so the switch isn't needed here.
+    // maybe just return the byte received or something. Will have to 
+    // think about what to do when receiving data
     switch (rec) {
       case ACK_CRC_NOT_MATCHED:
         result = CRC_ERROR;
@@ -129,7 +158,67 @@ sub_dev_response_t WriteSubDevCmd(uint8_t uAddr, sub_dev_cmd_t cmd) {
     }
   }
   free(packet);
+  ClearSSLine(device);
   return result;
+}
+
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-23 10:37:09 
+ * @Desc: asserts the SS line for the device passed
+ * @Param - device: the sub device to communicate with
+ * @Return: the timeout for the specific device 
+ */
+uint16_t AssertSSLine_GetTimeout(sub_dev_t device) {
+  uint16_t timeout = 0;
+  switch (device) {
+    case LEFT_FRONT:
+      digitalWrite(LF_SUB_SS_PIN, HIGH);
+      timeout = TIMEOUT_US_FRONT_SUB;
+      break;
+    case RIGHT_FRONT:
+      digitalWrite(RF_SUB_SS_PIN, HIGH);
+      timeout = TIMEOUT_US_FRONT_SUB;
+      break;
+    case LEFT_REAR:
+      digitalWrite(LR_SUB_SS_PIN, HIGH);
+      timeout = TIMEOUT_US_REAR_SUB;
+      break;
+    case RIGHT_REAR:
+      digitalWrite(RR_SUB_SS_PIN, HIGH);
+      timeout = TIMEOUT_US_REAR_SUB;
+      break;
+    default:
+      LogInfo("AssertSSLine_GetTimeout - ERROR: device passed not handled\n");
+      break;
+  }
+  return timeout;
+}
+
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-23 10:51:53 
+ * @Desc: clears the SS line for the device passed
+ * @Param - device: the sub device to halt communications with
+ */
+void ClearSSLine(sub_dev_t device) {
+  switch (device) {
+    case LEFT_FRONT:
+      digitalWrite(LF_SUB_SS_PIN, LOW);
+      break;
+    case RIGHT_FRONT:
+      digitalWrite(RF_SUB_SS_PIN, LOW);
+      break;
+    case LEFT_REAR:
+      digitalWrite(LR_SUB_SS_PIN, LOW);
+      break;
+    case RIGHT_REAR:
+      digitalWrite(RR_SUB_SS_PIN, LOW);
+      break;
+    default:
+      LogInfo("ClearSSLine - ERROR: device passed not handled\n");
+      break;
+  }
 }
 
 /** 
@@ -157,10 +246,9 @@ uint8_t ReadByteOrTimeout(uint16_t timeoutUs) {
  * @Param - addr: unique address of sub device
  * @Param - cmdByte: byte corresponding to sub device command
  */
-void ConfigPacket(sub_packet_t *newCmd, uint8_t uAddr, sub_dev_cmd_t cmdByte) {
-  newCmd->devAddr = uAddr;
+void ConfigPacket(sub_dev_packet_t *newCmd, sub_dev_cmd_t cmdByte) {
   newCmd->command = cmdByte;
-  newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_packet_t)-2);
+  newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_dev_packet_t)-2);
 }
 
 /** 
