@@ -14,11 +14,6 @@
 #define ROBOCLAW_TX_PIN 6
 #define ROBOCLAW_RX_PIN 7
 
-#define NANO_RF_UADDR 0xE9 // unique address of the right front sub board
-#define ACK_SUCCESS 0x5F // universal acknowledgement from sub devices
-#define ACK_CMD_NOT_HANDLED 0x83 // universal ack if command isn't handled
-#define ACK_CRC_NOT_MATCHED 0xD7 // universal ack if CRC doesn't match
-
 // all sub devices receive commands in the format of this typedef
 typedef struct {
   uint8_t command;
@@ -37,6 +32,10 @@ typedef enum {
   TR_LATCH, TR_UNLATCH,
   GET_PITCH, GET_ROLL, GET_SOL_STATUS, GET_SW_STATUS,
 } sub_dev_cmd_t;
+
+typedef enum {
+  ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS,
+} sub_dev_response_t;
 
 void InitRoboclaw(void);
 void ReadMasterCmd(void);
@@ -89,6 +88,7 @@ void ReadMasterCmd(void) {
       sub_dev_packet_t *packet = (sub_dev_packet_t*)malloc(sizeof(sub_dev_packet_t));
       masterSerial.readBytes((uint8_t *)packet, sizeof(sub_dev_packet_t));
       uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(sub_dev_packet_t)-2);
+      sub_dev_response_t response;
 
       if (crcCalc == packet->crc) {
         // got uncorrupted data
@@ -97,29 +97,30 @@ void ReadMasterCmd(void) {
             rclawSerial.listen();
             rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
             masterSerial.listen();
-            masterSerial.write(ACK_SUCCESS);
+            response = SUCCESS;
             break;
           case M5_FORWARD:
             rclawSerial.listen();
             rclaw.ForwardM2(ROBOCLAW_ADDRESS, 25);
             masterSerial.listen();
-            masterSerial.write(ACK_SUCCESS);
+            response = SUCCESS;
             break;
           case M5_REVERSE:
             rclawSerial.listen();
             rclaw.BackwardM2(ROBOCLAW_ADDRESS, 25);
             masterSerial.listen();
-            masterSerial.write(ACK_SUCCESS);
+            response = SUCCESS;
             break;
           default:
-            masterSerial.write(ACK_CMD_NOT_HANDLED);
+            response = CMD_ERROR;
             break;
         }
       }
       else {
         // data got corrupted
-        masterSerial.write(ACK_CRC_NOT_MATCHED);
+        response = CRC_ERROR;
       }
+      masterSerial.write(response);
       free(packet);
     }
   }

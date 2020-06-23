@@ -43,7 +43,7 @@ typedef enum {
 } sub_dev_cmd_t;
 
 typedef enum {
-  ERROR, CRC_ERROR, CMD_ERROR, SUCCESS,
+  ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS,
 } sub_dev_response_t;
 
 void InitRadio(void);
@@ -52,7 +52,7 @@ void UpdateTruckData(void);
 sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd);
 uint16_t AssertSSLine_GetTimeout(sub_dev_t device);
 void ClearSSLine(sub_dev_t device);
-uint8_t ReadByteOrTimeout(uint16_t timeoutUs); // timeout in microseconds
+sub_dev_response_t ReadByteOrTimeout(uint16_t timeoutUs); // timeout in microseconds
 void ConfigPacket(sub_dev_packet_t *newCmd, sub_dev_cmd_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 bool isTxBtnPressedEvent(void);
@@ -112,6 +112,9 @@ void loop() {
         case CRC_ERROR:
           LogInfo("Tx CRC ERROR\n");
           break;
+        default:
+          LogInfo("unhandled response received 0x%X\n", response);
+          break;
       }
     }
     preSendTime = curTime;
@@ -134,40 +137,45 @@ void loop() {
 sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd) {
   sub_dev_packet_t *packet = (sub_dev_packet_t*)malloc(sizeof(sub_dev_packet_t));
   ConfigPacket(packet, cmd);
-  uint8_t rec = 0; // the byte received from sub device
   uint8_t trys = NUM_RETRYS;
   uint16_t timeout = AssertSSLine_GetTimeout(device);
-  sub_dev_response_t result = ERROR; // default to no response ERROR
+  sub_dev_response_t response = ERROR; // default to no response error
   // if no response, or CRC doesn't match, keep trying
-  while (trys-- && (result <= CRC_ERROR)) {
+  while (trys-- && (response <= CRC_ERROR)) {
     COMM_BUS.write((unsigned char *)packet, sizeof(sub_dev_packet_t));
-    rec = ReadByteOrTimeout(timeout);
-    // TODO: you can make this better so the switch isn't needed here.
-    // maybe just return the byte received or something. Will have to 
-    // think about what to do when receiving data
-    switch (rec) {
-      case ACK_CRC_NOT_MATCHED:
-        result = CRC_ERROR;
-        break;
-      case ACK_CMD_NOT_HANDLED:
-        result = CMD_ERROR;
-        break;
-      case ACK_SUCCESS:
-        result = SUCCESS;
-        break;
-    }
+    response = ReadByteOrTimeout(timeout);
   }
   free(packet);
   ClearSSLine(device);
-  return result;
+  return response;
+}
+
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-22 09:40:27 
+ * @Desc: reads a byte if available in the timeout duration
+ * @Param - timeoutUs: the timeout duration in us
+ * @Return: byte read, or 0 if timeout
+ */
+sub_dev_response_t ReadByteOrTimeout(uint16_t timeoutUs) {
+  uint32_t start = micros();
+  while (!COMM_BUS.available()) {
+    if (micros() - start >= timeoutUs) {
+      return ERROR;
+    }
+  }
+  return (sub_dev_response_t)(COMM_BUS.read());
 }
 
 /** 
  * @Author: Kodiak North 
  * @Date: 2020-06-23 10:37:09 
- * @Desc: asserts the SS line for the device passed
+ * @Desc: asserts the SS line for the device passed and
+ * returns device-specific timeout value
  * @Param - device: the sub device to communicate with
- * @Return: the timeout for the specific device 
+ * @Return: the timeout for the specific device
+ * @Note: timeouts are longer for rear sub devices since
+ * they communicate with roboclaws
  */
 uint16_t AssertSSLine_GetTimeout(sub_dev_t device) {
   uint16_t timeout = 0;
@@ -219,23 +227,6 @@ void ClearSSLine(sub_dev_t device) {
       LogInfo("ClearSSLine - ERROR: device passed not handled\n");
       break;
   }
-}
-
-/** 
- * @Author: Kodiak North 
- * @Date: 2020-06-22 09:40:27 
- * @Desc: reads a byte if available in the timeout duration
- * @Param - timeoutUs: the timeout duration in us
- * @Return: byte read, or 0 if timeout
- */
-uint8_t ReadByteOrTimeout(uint16_t timeoutUs) {
-  uint32_t start = micros();
-  while (!COMM_BUS.available()) {
-    if (micros() - start >= timeoutUs) {
-      return 0;
-    }
-  }
-  return COMM_BUS.read();
 }
 
 /** 
