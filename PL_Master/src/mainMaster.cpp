@@ -31,7 +31,19 @@ typedef enum {
 typedef struct {
   uint8_t command;
   uint16_t crc;
-} sub_dev_packet_t;
+} sub_cmd_packet_t;
+
+// sub devices send pitch and roll data in this form
+typedef struct {
+  float data;
+  uint16_t crc;
+} sub_float_packet_t;
+
+// all sub devices send switch or solenoid status' in this form
+typedef struct {
+  uint8_t data;
+  uint16_t crc;
+} sub_byte_packet_t;
 
 // start cmd at 1 since timeout response is 0
 typedef enum {
@@ -50,10 +62,11 @@ void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
 sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd);
+float ReadPitch(sub_dev_t device);
 uint16_t AssertSSLine_GetTimeout(sub_dev_t device);
 void ClearSSLine(sub_dev_t device);
 sub_dev_response_t ReadByteOrTimeout(uint16_t timeoutUs); // timeout in microseconds
-void ConfigPacket(sub_dev_packet_t *newCmd, sub_dev_cmd_t cmdByte);
+void ConfigPacket(sub_cmd_packet_t *newCmd, sub_dev_cmd_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 bool isTxBtnPressedEvent(void);
 
@@ -74,6 +87,7 @@ void setup() {
   digitalWrite(RR_SUB_SS_PIN, LOW);
   pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
+  // send simple cmds to ALL sub boards here and ensure they respond with SUCCESS
 }
 
 unsigned long curTime = 0;
@@ -90,32 +104,34 @@ void loop() {
     // UpdateTruckData();
     // right front nano comm
     if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
-      static bool flip = true;
-      sub_dev_response_t response;
-      if (flip) {
-        response = WriteCmd(RIGHT_REAR, M5_FORWARD);
-      }
-      else {
-        response = WriteCmd(RIGHT_REAR, M5_STOP);
-      }
-      flip = !flip;
-      switch (response) {
-        case ERROR:
-          LogInfo("Tx ERROR\n");
-          break;
-        case SUCCESS:
-          LogInfo("Tx SUCCESS\n");
-          break;
-        case CMD_ERROR:
-          LogInfo("Tx CMD ERROR\n");
-          break;
-        case CRC_ERROR:
-          LogInfo("Tx CRC ERROR\n");
-          break;
-        default:
-          LogInfo("unhandled response received 0x%X\n", response);
-          break;
-      }
+      ReadPitch(RIGHT_REAR);
+      /** NOTE: SAVE CODE BELOW */
+      // static bool flip = true;
+      // sub_dev_response_t response;
+      // if (flip) {
+      //   response = WriteCmd(RIGHT_REAR, M5_FORWARD);
+      // }
+      // else {
+      //   response = WriteCmd(RIGHT_REAR, M5_STOP);
+      // }
+      // flip = !flip;
+      // switch (response) {
+      //   case ERROR:
+      //     LogInfo("Tx ERROR\n");
+      //     break;
+      //   case SUCCESS:
+      //     LogInfo("Tx SUCCESS\n");
+      //     break;
+      //   case CMD_ERROR:
+      //     LogInfo("Tx CMD ERROR\n");
+      //     break;
+      //   case CRC_ERROR:
+      //     LogInfo("Tx CRC ERROR\n");
+      //     break;
+      //   default:
+      //     LogInfo("unhandled response received 0x%X\n", response);
+      //     break;
+      // }
     }
     preSendTime = curTime;
   }
@@ -135,19 +151,60 @@ void loop() {
  * @Param - cmd: the command being sent
  */
 sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd) {
-  sub_dev_packet_t *packet = (sub_dev_packet_t*)malloc(sizeof(sub_dev_packet_t));
+  sub_cmd_packet_t *packet = (sub_cmd_packet_t*)malloc(sizeof(sub_cmd_packet_t));
   ConfigPacket(packet, cmd);
   uint8_t trys = NUM_RETRYS;
   uint16_t timeout = AssertSSLine_GetTimeout(device);
   sub_dev_response_t response = ERROR; // default to no response error
   // if no response, or CRC doesn't match, keep trying
   while (trys-- && (response <= CRC_ERROR)) {
-    COMM_BUS.write((unsigned char *)packet, sizeof(sub_dev_packet_t));
+    COMM_BUS.write((unsigned char *)packet, sizeof(sub_cmd_packet_t));
     response = ReadByteOrTimeout(timeout);
   }
   free(packet);
   ClearSSLine(device);
   return response;
+}
+
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-23 15:01:04 
+ * @Desc: requests pitch from sub device
+ * @Param - device: device to get pitch from
+ */
+float ReadPitch(sub_dev_t device) {
+  sub_cmd_packet_t *cmdPacket = (sub_cmd_packet_t*)malloc(sizeof(sub_cmd_packet_t));
+  ConfigPacket(cmdPacket, GET_PITCH);
+  uint8_t trys = NUM_RETRYS;
+  uint16_t timeout = AssertSSLine_GetTimeout(device); // TODO: maybe split these into two functions
+
+  sub_float_packet_t *floatPacket = (sub_float_packet_t*)malloc(sizeof(sub_float_packet_t));
+  // start off crc's unequal
+  floatPacket->crc = 1;
+  uint16_t crcCalc = 0;
+
+  uint32_t start = 0, finish = 0;
+  while (trys-- && (crcCalc != floatPacket->crc)) {
+    COMM_BUS.write((unsigned char *)cmdPacket, sizeof(sub_cmd_packet_t));
+    start = micros();
+    while (!COMM_BUS.available() && (micros()-start < timeout)) {};
+    finish = micros();
+    COMM_BUS.readBytes((uint8_t *)floatPacket, sizeof(sub_float_packet_t));
+    crcCalc = GetCRC16((unsigned char *)floatPacket, sizeof(sub_float_packet_t)-2);
+  }
+
+  float pitch = floatPacket->data;
+  if (crcCalc != floatPacket->crc) {
+    LogInfo("failed to receive float :(\n");
+  }
+  else {
+    LogInfo("pitch received ", pitch, 2, true);
+  }
+
+  free(cmdPacket);
+  free(floatPacket);
+  ClearSSLine(device);
+  return pitch;
 }
 
 /** 
@@ -237,9 +294,9 @@ void ClearSSLine(sub_dev_t device) {
  * @Param - addr: unique address of sub device
  * @Param - cmdByte: byte corresponding to sub device command
  */
-void ConfigPacket(sub_dev_packet_t *newCmd, sub_dev_cmd_t cmdByte) {
+void ConfigPacket(sub_cmd_packet_t *newCmd, sub_dev_cmd_t cmdByte) {
   newCmd->command = cmdByte;
-  newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_dev_packet_t)-2);
+  newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(sub_cmd_packet_t)-2);
 }
 
 /** 

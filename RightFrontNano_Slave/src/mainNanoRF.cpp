@@ -18,7 +18,19 @@
 typedef struct {
   uint8_t command;
   uint16_t crc;
-} sub_dev_packet_t;
+} sub_cmd_packet_t;
+
+// sub devices send pitch and roll data in this form
+typedef struct {
+  float data;
+  uint16_t crc;
+} sub_float_packet_t;
+
+// all sub devices send switch or solenoid status' in this form
+typedef struct {
+  uint8_t data;
+  uint16_t crc;
+} sub_byte_packet_t;
 
 /** 
  * commands sent from master board
@@ -85,42 +97,49 @@ void ReadMasterCmd(void) {
     // communication to this device is OPEN
     if (masterSerial.available()) {
       // data from the master is available
-      sub_dev_packet_t *packet = (sub_dev_packet_t*)malloc(sizeof(sub_dev_packet_t));
-      masterSerial.readBytes((uint8_t *)packet, sizeof(sub_dev_packet_t));
-      uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(sub_dev_packet_t)-2);
-      sub_dev_response_t response;
+      sub_cmd_packet_t *packet = (sub_cmd_packet_t*)malloc(sizeof(sub_cmd_packet_t));
+      masterSerial.readBytes((uint8_t *)packet, sizeof(sub_cmd_packet_t));
+      uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(sub_cmd_packet_t)-2);
 
       if (crcCalc == packet->crc) {
+        // TODO: will want to do this differently for sure
+        sub_float_packet_t *floatPacket = (sub_float_packet_t*)malloc(sizeof(sub_float_packet_t));
         // got uncorrupted data
         switch (packet->command) {
           case M5_STOP:
             rclawSerial.listen();
             rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
             masterSerial.listen();
-            response = SUCCESS;
+            masterSerial.write(SUCCESS);
             break;
           case M5_FORWARD:
             rclawSerial.listen();
             rclaw.ForwardM2(ROBOCLAW_ADDRESS, 25);
             masterSerial.listen();
-            response = SUCCESS;
+            masterSerial.write(SUCCESS);
             break;
           case M5_REVERSE:
             rclawSerial.listen();
             rclaw.BackwardM2(ROBOCLAW_ADDRESS, 25);
             masterSerial.listen();
-            response = SUCCESS;
+            masterSerial.write(SUCCESS);
+            break;
+          case GET_PITCH:
+            // write configPacket function?
+            floatPacket->data = -4.56;
+            floatPacket->crc = GetCRC16((unsigned char *)floatPacket, sizeof(sub_float_packet_t)-2);
+            masterSerial.write((unsigned char *)floatPacket, sizeof(sub_float_packet_t));
             break;
           default:
-            response = CMD_ERROR;
+            masterSerial.write(CMD_ERROR);
             break;
         }
+        free(floatPacket);
       }
       else {
         // data got corrupted
-        response = CRC_ERROR;
+        masterSerial.write(CRC_ERROR);
       }
-      masterSerial.write(response);
       free(packet);
     }
   }
