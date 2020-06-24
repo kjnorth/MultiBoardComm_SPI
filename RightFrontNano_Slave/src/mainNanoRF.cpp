@@ -4,7 +4,7 @@
 #include "..\lib\DataLog\DataLog.h"
 #include "..\lib\RoboClaw\RoboClaw.h"
 
-#define SUB_DEV_TX_PIN 2
+#define subdev_id_tX_PIN 2
 #define SUB_DEV_RX_PIN 3
 #define SUB_DEV_SS_PIN 4
 #define SUB_DEV_IRQ_PIN 5
@@ -18,19 +18,19 @@
 typedef struct {
   uint8_t command;
   uint16_t crc;
-} sub_cmd_packet_t;
+} subdev_cmd_packet_t;
 
 // sub devices send pitch and roll data in this form
 typedef struct {
   float data;
   uint16_t crc;
-} sub_float_packet_t;
+} subdev_float_packet_t;
 
 // all sub devices send switch or solenoid status' in this form
 typedef struct {
   uint8_t data;
   uint16_t crc;
-} sub_byte_packet_t;
+} subdev_byte_packet_t;
 
 /** 
  * commands sent from master board
@@ -38,16 +38,19 @@ typedef struct {
  * @todo: make #define for cmd set if front board or rear board in config file
  */
 typedef enum {
+  // front sub dev cmds
   SOLS_DISABLE=1, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
   LASER_DISABLE, LASER_ENABLE,
+  GET_PITCH, GET_ROLL, GET_SOL_STATUS,
+  // rear sub dev cmds
   M5_STOP, M5_FORWARD, M5_REVERSE,
   TR_LATCH, TR_UNLATCH,
-  GET_PITCH, GET_ROLL, GET_SOL_STATUS, GET_SW_STATUS,
-} sub_dev_cmd_t;
+  GET_SW_STATUS,
+} subdev_cmd_t;
 
 typedef enum {
   ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
-} sub_dev_response_t;
+} subdev_response_t;
 
 void InitRoboclaw(void);
 void ReadMasterCmd(void);
@@ -57,7 +60,7 @@ uint16_t GetCRC16(unsigned char *buf, int nBytes);
 SoftwareSerial rclawSerial(ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN); // Rx, Tx - roboclaw serial port
 RoboClaw rclaw(&rclawSerial, ROBOCLAW_TIMEOUT_US);
 
-SoftwareSerial masterSerial(SUB_DEV_RX_PIN, SUB_DEV_TX_PIN); // Rx, Tx - master board serial bus
+SoftwareSerial masterSerial(SUB_DEV_RX_PIN, subdev_id_tX_PIN); // Rx, Tx - master board serial bus
 
 float testFloat;
 unsigned long curTime = 0;
@@ -98,9 +101,9 @@ void ReadMasterCmd(void) {
     // communication to this device is OPEN
     if (masterSerial.available()) {
       // data from the master is available
-      sub_cmd_packet_t *packet = (sub_cmd_packet_t*)malloc(sizeof(sub_cmd_packet_t));
-      masterSerial.readBytes((uint8_t *)packet, sizeof(sub_cmd_packet_t));
-      uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(sub_cmd_packet_t)-2);
+      subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
+      masterSerial.readBytes((uint8_t *)packet, sizeof(subdev_cmd_packet_t));
+      uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(subdev_cmd_packet_t)-2);
       static float data = -3.29;
 
       if (crcCalc == packet->crc) {
@@ -144,10 +147,10 @@ void ReadMasterCmd(void) {
 }
 
 void SendFloat(float data) {
-  sub_float_packet_t *floatPacket = (sub_float_packet_t*)malloc(sizeof(sub_float_packet_t));
+  subdev_float_packet_t *floatPacket = (subdev_float_packet_t*)malloc(sizeof(subdev_float_packet_t));
   floatPacket->data = data;
-  floatPacket->crc = GetCRC16((unsigned char *)floatPacket, sizeof(sub_float_packet_t)-2);
-  masterSerial.write((unsigned char *)floatPacket, sizeof(sub_float_packet_t));
+  floatPacket->crc = GetCRC16((unsigned char *)floatPacket, sizeof(subdev_float_packet_t)-2);
+  masterSerial.write((unsigned char *)floatPacket, sizeof(subdev_float_packet_t));
   free(floatPacket);
 }
 
