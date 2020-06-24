@@ -22,8 +22,8 @@
 #define NUM_RETRYS 3
 #define TIMEOUT_US_FRONT_SUB 500 // microseconds
 #define TIMEOUT_US_REAR_SUB 2000 // microseconds // longer for rear devs since they communicate with rclaws
-#define TIMEOUT_US_REC_FLOAT_DATA 200 // timeout waiting for float data available after sending request cmd
-#define REC_FLOAT_ERROR_RESPONSE -17349.21 // if error receiving a float, the value is returned
+#define TIMEOUT_US_REC_FLOAT_DATA 150 // timeout waiting for float data available after sending request cmd
+#define REC_FLOAT_ERROR_RESPONSE -17349.21 // if error receiving a float, this value is returned
 
 typedef enum {
   LEFT_FRONT, RIGHT_FRONT, LEFT_REAR, RIGHT_REAR
@@ -108,8 +108,9 @@ void loop() {
     // right front nano comm
     if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
       float data = ReadPitch(RIGHT_REAR);
-      if (data != REC_FLOAT_ERROR_RESPONSE)
+      if (data != REC_FLOAT_ERROR_RESPONSE) {
         LogInfo("data received ", data, 2, true);
+      }
       /** NOTE: SAVE CODE BELOW ******************
       static bool flip = true;
       sub_dev_response_t response;
