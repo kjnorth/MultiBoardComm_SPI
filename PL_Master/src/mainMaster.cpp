@@ -22,6 +22,8 @@
 #define NUM_RETRYS 3
 #define TIMEOUT_US_FRONT_SUB 500 // microseconds
 #define TIMEOUT_US_REAR_SUB 2000 // microseconds // longer for rear devs since they communicate with rclaws
+#define TIMEOUT_US_REC_FLOAT_DATA 200 // timeout waiting for float data available after sending request cmd
+#define REC_FLOAT_ERROR_RESPONSE -17349.21 // if error receiving a float, the value is returned
 
 typedef enum {
   LEFT_FRONT, RIGHT_FRONT, LEFT_REAR, RIGHT_REAR
@@ -52,20 +54,21 @@ typedef enum {
   M5_STOP, M5_FORWARD, M5_REVERSE,
   TR_LATCH, TR_UNLATCH,
   GET_PITCH, GET_ROLL, GET_SOL_STATUS, GET_SW_STATUS,
-} sub_dev_cmd_t;
+} sub_dev_cmd_t; // TODO: switch to two enums, sub_front_cmd_t and sub_rear_cmd_t for FRONT and REAR projects
 
 typedef enum {
-  ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS,
+  ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
 } sub_dev_response_t;
 
 void InitRadio(void);
 bool IsConnected(void);
 void UpdateTruckData(void);
 sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd);
-float ReadPitch(sub_dev_t device);
+sub_dev_response_t ReadByteOrTimeout(uint16_t timeoutUs); // timeout in microseconds
 uint16_t AssertSSLine_GetTimeout(sub_dev_t device);
 void ClearSSLine(sub_dev_t device);
-sub_dev_response_t ReadByteOrTimeout(uint16_t timeoutUs); // timeout in microseconds
+float ReadPitch(sub_dev_t device);
+bool RecDataOrTimeout(uint16_t timeoutUs); // timeout in microseconds
 void ConfigPacket(sub_cmd_packet_t *newCmd, sub_dev_cmd_t cmdByte);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 bool isTxBtnPressedEvent(void);
@@ -104,34 +107,37 @@ void loop() {
     // UpdateTruckData();
     // right front nano comm
     if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
-      ReadPitch(RIGHT_REAR);
-      /** NOTE: SAVE CODE BELOW */
-      // static bool flip = true;
-      // sub_dev_response_t response;
-      // if (flip) {
-      //   response = WriteCmd(RIGHT_REAR, M5_FORWARD);
-      // }
-      // else {
-      //   response = WriteCmd(RIGHT_REAR, M5_STOP);
-      // }
-      // flip = !flip;
-      // switch (response) {
-      //   case ERROR:
-      //     LogInfo("Tx ERROR\n");
-      //     break;
-      //   case SUCCESS:
-      //     LogInfo("Tx SUCCESS\n");
-      //     break;
-      //   case CMD_ERROR:
-      //     LogInfo("Tx CMD ERROR\n");
-      //     break;
-      //   case CRC_ERROR:
-      //     LogInfo("Tx CRC ERROR\n");
-      //     break;
-      //   default:
-      //     LogInfo("unhandled response received 0x%X\n", response);
-      //     break;
-      // }
+      float data = ReadPitch(RIGHT_REAR);
+      if (data != REC_FLOAT_ERROR_RESPONSE)
+        LogInfo("data received ", data, 2, true);
+      /** NOTE: SAVE CODE BELOW ******************
+      static bool flip = true;
+      sub_dev_response_t response;
+      if (flip) {
+        response = WriteCmd(RIGHT_REAR, M5_FORWARD);
+      }
+      else {
+        response = WriteCmd(RIGHT_REAR, M5_STOP);
+      }
+      flip = !flip;
+      switch (response) {
+        case ERROR:
+          LogInfo("Tx ERROR\n");
+          break;
+        case SUCCESS:
+          LogInfo("Tx SUCCESS\n");
+          break;
+        case CMD_ERROR:
+          LogInfo("Tx CMD ERROR\n");
+          break;
+        case CRC_ERROR:
+          LogInfo("Tx CRC ERROR\n");
+          break;
+        default:
+          LogInfo("unhandled response received 0x%X\n", response);
+          break;
+      }
+      // **********************************************/
     }
     preSendTime = curTime;
   }
@@ -156,6 +162,7 @@ sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd) {
   uint8_t trys = NUM_RETRYS;
   uint16_t timeout = AssertSSLine_GetTimeout(device);
   sub_dev_response_t response = ERROR; // default to no response error
+
   // if no response, or CRC doesn't match, keep trying
   while (trys-- && (response <= CRC_ERROR)) {
     COMM_BUS.write((unsigned char *)packet, sizeof(sub_cmd_packet_t));
@@ -164,47 +171,6 @@ sub_dev_response_t WriteCmd(sub_dev_t device, sub_dev_cmd_t cmd) {
   free(packet);
   ClearSSLine(device);
   return response;
-}
-
-/** 
- * @Author: Kodiak North 
- * @Date: 2020-06-23 15:01:04 
- * @Desc: requests pitch from sub device
- * @Param - device: device to get pitch from
- */
-float ReadPitch(sub_dev_t device) {
-  sub_cmd_packet_t *cmdPacket = (sub_cmd_packet_t*)malloc(sizeof(sub_cmd_packet_t));
-  ConfigPacket(cmdPacket, GET_PITCH);
-  uint8_t trys = NUM_RETRYS;
-  uint16_t timeout = AssertSSLine_GetTimeout(device); // TODO: maybe split these into two functions
-
-  sub_float_packet_t *floatPacket = (sub_float_packet_t*)malloc(sizeof(sub_float_packet_t));
-  // start off crc's unequal
-  floatPacket->crc = 1;
-  uint16_t crcCalc = 0;
-
-  uint32_t start = 0, finish = 0;
-  while (trys-- && (crcCalc != floatPacket->crc)) {
-    COMM_BUS.write((unsigned char *)cmdPacket, sizeof(sub_cmd_packet_t));
-    start = micros();
-    while (!COMM_BUS.available() && (micros()-start < timeout)) {};
-    finish = micros();
-    COMM_BUS.readBytes((uint8_t *)floatPacket, sizeof(sub_float_packet_t));
-    crcCalc = GetCRC16((unsigned char *)floatPacket, sizeof(sub_float_packet_t)-2);
-  }
-
-  float pitch = floatPacket->data;
-  if (crcCalc != floatPacket->crc) {
-    LogInfo("failed to receive float :(\n");
-  }
-  else {
-    LogInfo("pitch received ", pitch, 2, true);
-  }
-
-  free(cmdPacket);
-  free(floatPacket);
-  ClearSSLine(device);
-  return pitch;
 }
 
 /** 
@@ -284,6 +250,54 @@ void ClearSSLine(sub_dev_t device) {
       LogInfo("ClearSSLine - ERROR: device passed not handled\n");
       break;
   }
+}
+
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-23 15:01:04 
+ * @Desc: requests pitch from sub device
+ * @Param - device: device to get pitch from
+ */
+float ReadPitch(sub_dev_t device) {
+  sub_dev_response_t response = WriteCmd(device, GET_PITCH);
+  if (response != DATA_INCOMING) {
+    LogInfo("ReadPitch - ERROR: sub dev not accepting pitch request, response 0x%X\n", response);
+    return REC_FLOAT_ERROR_RESPONSE;
+  }
+
+  if (!RecDataOrTimeout(TIMEOUT_US_REC_FLOAT_DATA)) {
+    LogInfo("ReadPitch - ERROR: sub dev didn't send float data after responding to request cmd\n");
+    return REC_FLOAT_ERROR_RESPONSE;
+  }
+
+  sub_float_packet_t *floatPacket = (sub_float_packet_t*)malloc(sizeof(sub_float_packet_t));
+  COMM_BUS.readBytes((uint8_t *)floatPacket, sizeof(sub_float_packet_t));
+  float pitch = floatPacket->data;
+  uint16_t crcRec = floatPacket->crc;
+  uint16_t crcCalc = GetCRC16((unsigned char *)floatPacket, sizeof(sub_float_packet_t)-2);
+  free(floatPacket);
+
+  if (crcCalc != crcRec) {
+    LogInfo("ReadPitch - ERROR: float data got corrupted\n");
+    return REC_FLOAT_ERROR_RESPONSE;
+  }
+  return pitch;
+}
+
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-06-24 12:02:31 
+ * @Desc: waits for data available on COMM_BUS until timeout
+ * @Param - timeoutUs: the timeout duration in microseconds
+ * @Return: true if data received, false if timeout 
+ */
+bool RecDataOrTimeout(uint16_t timeoutUs) {
+  uint32_t start = micros();
+  while (!COMM_BUS.available()) {
+    if (micros()-start >= timeoutUs)
+      return false; // timeout
+  }
+  return true; // data received
 }
 
 /** 

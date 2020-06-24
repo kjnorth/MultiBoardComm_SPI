@@ -46,11 +46,12 @@ typedef enum {
 } sub_dev_cmd_t;
 
 typedef enum {
-  ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS,
+  ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
 } sub_dev_response_t;
 
 void InitRoboclaw(void);
 void ReadMasterCmd(void);
+void SendFloat(float data);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 
 SoftwareSerial rclawSerial(ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN); // Rx, Tx - roboclaw serial port
@@ -100,10 +101,9 @@ void ReadMasterCmd(void) {
       sub_cmd_packet_t *packet = (sub_cmd_packet_t*)malloc(sizeof(sub_cmd_packet_t));
       masterSerial.readBytes((uint8_t *)packet, sizeof(sub_cmd_packet_t));
       uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(sub_cmd_packet_t)-2);
+      static float data = -3.29;
 
       if (crcCalc == packet->crc) {
-        // TODO: will want to do this differently for sure
-        sub_float_packet_t *floatPacket = (sub_float_packet_t*)malloc(sizeof(sub_float_packet_t));
         // got uncorrupted data
         switch (packet->command) {
           case M5_STOP:
@@ -125,16 +125,13 @@ void ReadMasterCmd(void) {
             masterSerial.write(SUCCESS);
             break;
           case GET_PITCH:
-            // write configPacket function?
-            floatPacket->data = -4.56;
-            floatPacket->crc = GetCRC16((unsigned char *)floatPacket, sizeof(sub_float_packet_t)-2);
-            masterSerial.write((unsigned char *)floatPacket, sizeof(sub_float_packet_t));
+            masterSerial.write(DATA_INCOMING);
+            SendFloat(data++);
             break;
           default:
             masterSerial.write(CMD_ERROR);
             break;
         }
-        free(floatPacket);
       }
       else {
         // data got corrupted
@@ -144,6 +141,14 @@ void ReadMasterCmd(void) {
     }
   }
   // else {} // communication to this device is CLOSED
+}
+
+void SendFloat(float data) {
+  sub_float_packet_t *floatPacket = (sub_float_packet_t*)malloc(sizeof(sub_float_packet_t));
+  floatPacket->data = data;
+  floatPacket->crc = GetCRC16((unsigned char *)floatPacket, sizeof(sub_float_packet_t)-2);
+  masterSerial.write((unsigned char *)floatPacket, sizeof(sub_float_packet_t));
+  free(floatPacket);
 }
 
 /** 
