@@ -51,6 +51,14 @@ class SubDev {
     uint16_t m_timeout; // this is in microseconds
     // **** END PROTECTED MEMBER VARIABLES ****
 
+    // **** PROTECTED STRUCTS ****
+    // all sub devices send switch or solenoid statuses in this form
+    typedef struct {
+      uint8_t data;
+      uint16_t crc;
+    } subdev_byte_packet_t;
+    // **** END PROTECTED STRUCTS ****
+
     // **** PROTECTED FUNCTIONS ****
     bool RecDataOrTimeout(void);
     uint16_t GetCRC16(unsigned char *buf, int nBytes);
@@ -63,12 +71,6 @@ class SubDev {
       uint8_t command;
       uint16_t crc;
     } subdev_cmd_packet_t;
-
-    // all sub devices send switch or solenoid statuses in this form
-    typedef struct {
-      uint8_t data;
-      uint16_t crc;
-    } subdev_byte_packet_t;
     // **** END PRIVATE STRUCTS ****
 
     // **** PRIVATE FUNCTIONS ****

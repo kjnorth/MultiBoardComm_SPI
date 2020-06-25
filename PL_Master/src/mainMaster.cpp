@@ -34,7 +34,6 @@ void setup() {
   LogInfo("Master boots up\n");
   pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
-  // send simple cmds to ALL sub boards here and ensure they respond with SUCCESS
 }
 
 unsigned long curTime = 0;
