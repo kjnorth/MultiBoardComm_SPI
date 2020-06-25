@@ -13,6 +13,8 @@
  * @Date: 2020-06-23 15:01:04 
  * @Desc: requests pitch from sub device
  * @Param - device: device to get pitch from
+ * @Return: pitch data or REC_FLOAT_ERROR_RESPONSE
+ * if error occurred
  */
 float FrontSubDev::ReadPitch() {
   subdev_response_t response = WriteCmd(GET_PITCH);
@@ -21,7 +23,7 @@ float FrontSubDev::ReadPitch() {
     return REC_FLOAT_ERROR_RESPONSE;
   }
 
-  if (!RecDataOrTimeout(TIMEOUT_US_REC_FLOAT_DATA)) {
+  if (!RecDataOrTimeout()) {
     LogInfo("ReadPitch - ERROR: sub dev didn't send float data after responding to request cmd\n");
     return REC_FLOAT_ERROR_RESPONSE;
   }

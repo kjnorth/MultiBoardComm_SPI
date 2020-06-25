@@ -40,7 +40,7 @@ typedef enum {
 class SubDev {
   public:
     // **** PUBLIC FUNCTIONS ****
-    SubDev(subdev_id_t id, uint8_t ssPin);
+    SubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeoutUs);
     subdev_response_t WriteCmd(subdev_cmd_t cmd);
     // **** END PUBLIC FUNCTIONS ****
 
@@ -48,10 +48,11 @@ class SubDev {
     // **** PROTECTED MEMBER VARIABLES ****
     subdev_id_t m_id;
     uint8_t m_ssPin;
+    uint16_t m_timeout; // this is in microseconds
     // **** END PROTECTED MEMBER VARIABLES ****
 
     // **** PROTECTED FUNCTIONS ****
-    bool RecDataOrTimeout(uint16_t timeoutUs); // timeout in microseconds
+    bool RecDataOrTimeout(void);
     uint16_t GetCRC16(unsigned char *buf, int nBytes);
     // **** END PROTECTED FUNCTIONS ****
 
@@ -71,9 +72,9 @@ class SubDev {
     // **** END PRIVATE STRUCTS ****
 
     // **** PRIVATE FUNCTIONS ****
-    subdev_response_t ReadByteOrTimeout(uint16_t timeoutUs); // timeout in microseconds
-    uint16_t AssertSSLine_GetTimeout();
-    void ClearSSLine();
+    subdev_response_t ReadByteOrTimeout(void);
+    void AssertSSLine(void);
+    void ClearSSLine(void);
     void ConfigPacket(subdev_cmd_packet_t *newCmd, subdev_cmd_t cmdByte);
     // **** END PRIVATE FUNCTIONS ****
 };

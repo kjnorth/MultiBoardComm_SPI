@@ -23,10 +23,10 @@ bool isTxBtnPressedEvent(void);
 TX_TO_RX ttr;
 RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 
-FrontSubDev leftFront(LEFT_FRONT, LF_SUBDEV_SS_PIN);
-FrontSubDev rightFront(RIGHT_FRONT, RF_SUBDEV_SS_PIN);
-// RearSubDev leftRear(LEFT_REAR, LR_SUBDEV_SS_PIN);
-// RearSubDev rightRear(RIGHT_REAR, RR_SUBDEV_SS_PIN);
+FrontSubDev leftFront(LEFT_FRONT, LF_SUBDEV_SS_PIN, F_SUBDEV_TIMEOUT_US);
+FrontSubDev rightFront(RIGHT_FRONT, RF_SUBDEV_SS_PIN, F_SUBDEV_TIMEOUT_US);
+// RearSubDev leftRear(LEFT_REAR, LR_SUBDEV_SS_PIN, R_SUBDEV_TIMEOUT_US);
+// RearSubDev rightRear(RIGHT_REAR, RR_SUBDEV_SS_PIN, R_SUBDEV_TIMEOUT_US);
 
 void setup() {
   Serial.begin(115200);
@@ -51,10 +51,10 @@ void loop() {
     // UpdateTruckData();
     // right front nano comm
     if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
-      // float data = ReadPitch(RIGHT_REAR);
-      // if (data != REC_FLOAT_ERROR_RESPONSE) {
-      //   LogInfo("data received ", data, 2, true);
-      // }
+      float data = rightFront.ReadPitch();
+      if (data != REC_FLOAT_ERROR_RESPONSE) {
+        LogInfo("data received ", data, 2, true);
+      }
       /** NOTE: SAVE CODE BELOW ******************
       static bool flip = true;
       subdev_response_t response;

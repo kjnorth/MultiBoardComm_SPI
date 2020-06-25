@@ -36,12 +36,12 @@ typedef struct {
  * the module's IRQ pin does not need to be mapped to an
  * interrupt pin on the Arduino */
 #define RF_USE_IRQ_PIN
-#define RF_IRQ_PIN              48
-#define RF_CE_PIN				49
-#define	RF_MISO_PIN             50
-#define RF_MOSI_PIN             51
-#define RF_CLK_PIN              52
-#define RF_CSN_PIN				53 // slave select pin
+#define RF_IRQ_PIN					48
+#define RF_CE_PIN						49
+#define	RF_MISO_PIN         50
+#define RF_MOSI_PIN         51
+#define RF_CLK_PIN          52
+#define RF_CSN_PIN					53 // slave select pin
 // **** END TRUCK DEFINES ****
 
 // **** SUB DEV DEFINES ****
@@ -51,9 +51,9 @@ typedef struct {
 #define RR_SUBDEV_SS_PIN 5
 
 #define NUM_RETRYS 3
-#define TIMEOUT_US_FRONT_SUB 500 // microseconds
-#define TIMEOUT_US_REAR_SUB 2000 // microseconds // longer for rear devs since they communicate with rclaws
-#define TIMEOUT_US_REC_FLOAT_DATA 150 // timeout waiting for float data available after sending request cmd
+#define F_SUBDEV_TIMEOUT_US 1000 // front subdev response timeout in microseconds
+#define R_SUBDEV_TIMEOUT_US 2000 // longer for rear devs since they communicate with rclaws
+#define TIMEOUT_US_REC_DATA 150 // timeout waiting for data available after receiving DATA_INCOMING response
 #define REC_FLOAT_ERROR_RESPONSE -17349.21 // if error receiving a float, this value is returned
 // **** END SUB DEV DEFINES ****
 

@@ -7,9 +7,10 @@
 #include "SubDevice.h"
 
 // **** PUBLIC FUNCTIONS ****
-SubDev::SubDev(subdev_id_t id, uint8_t ssPin) {
+SubDev::SubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeoutUs) {
   m_id = id;
   m_ssPin = ssPin;
+  m_timeout = responseTimeoutUs;
   pinMode(ssPin, OUTPUT);
   digitalWrite(ssPin, LOW);
 }
@@ -25,13 +26,13 @@ subdev_response_t SubDev::WriteCmd(subdev_cmd_t cmd) {
   subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
   ConfigPacket(packet, cmd);
   uint8_t trys = NUM_RETRYS;
-  uint16_t timeout = AssertSSLine_GetTimeout();
   subdev_response_t response = ERROR; // default to no response error
+  AssertSSLine();
 
   // if no response, or CRC doesn't match, keep trying
   while (trys-- && (response <= CRC_ERROR)) {
     COMM_BUS.write((unsigned char *)packet, sizeof(subdev_cmd_packet_t));
-    response = ReadByteOrTimeout(timeout);
+    response = ReadByteOrTimeout();
   }
   free(packet);
   ClearSSLine();
@@ -43,17 +44,17 @@ subdev_response_t SubDev::WriteCmd(subdev_cmd_t cmd) {
 /** 
  * @Author: Kodiak North 
  * @Date: 2020-06-24 12:02:31 
- * @Desc: waits for data available on COMM_BUS until timeout
- * @Param - timeoutUs: the timeout duration in microseconds
- * @Return: true if data received, false if timeout 
+ * @Desc: waits until timeout for data available on
+ * COMM_BUS after receiving DATA_INCOMING response
+ * @Return: true if data received, false if timeout
  */
-bool SubDev::RecDataOrTimeout(uint16_t timeoutUs) {
+bool SubDev::RecDataOrTimeout(void) {
   uint32_t start = micros();
   while (!COMM_BUS.available()) {
-    if (micros()-start >= timeoutUs)
-      return false; // timeout
+    if (micros()-start >= TIMEOUT_US_REC_DATA)
+      return false;
   }
-  return true; // data received
+  return true;
 }
 
 // Calculates CRC16 of nBytes of data in byte array message
@@ -78,13 +79,12 @@ uint16_t SubDev::GetCRC16(unsigned char *buf, int nBytes) {
  * @Author: Kodiak North 
  * @Date: 2020-06-22 09:40:27 
  * @Desc: reads a byte if available in the timeout duration
- * @Param - timeoutUs: the timeout duration in us
  * @Return: byte read, or 0 if timeout
  */
-subdev_response_t SubDev::ReadByteOrTimeout(uint16_t timeoutUs) {
+subdev_response_t SubDev::ReadByteOrTimeout(void) {
   uint32_t start = micros();
   while (!COMM_BUS.available()) {
-    if (micros() - start >= timeoutUs) {
+    if (micros() - start >= m_timeout) {
       return ERROR;
     }
   }
@@ -96,15 +96,9 @@ subdev_response_t SubDev::ReadByteOrTimeout(uint16_t timeoutUs) {
  * @Date: 2020-06-23 10:37:09 
  * @Desc: asserts the SS line for the device passed and
  * returns device-specific timeout value
- * @Return: the timeout for the specific device
- * @Note: timeouts are longer for rear sub devices since
- * they communicate with roboclaws
  */
-uint16_t SubDev::AssertSSLine_GetTimeout() {
-  uint16_t timeout = 0;
+void SubDev::AssertSSLine(void) {
   digitalWrite(m_ssPin, HIGH);
-  // TODO: how should I handle timeouts? pass into constructor?? sounds good to me
-  return timeout;
 }
 
 /** 
@@ -112,7 +106,7 @@ uint16_t SubDev::AssertSSLine_GetTimeout() {
  * @Date: 2020-06-23 10:51:53 
  * @Desc: clears the SS line for the device passed
  */
-void SubDev::ClearSSLine() {
+void SubDev::ClearSSLine(void) {
   digitalWrite(m_ssPin, LOW);
 }
 
