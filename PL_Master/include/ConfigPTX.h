@@ -50,11 +50,15 @@ typedef struct {
 #define LR_SUBDEV_SS_PIN 4
 #define RR_SUBDEV_SS_PIN 5
 
+#define LF_SUBDEV_PITCH_OFFSET 0.11
+#define LF_SUBDEV_ROLL_OFFSET 1.43
+#define RF_SUBDEV_PITCH_OFFSET 0.52
+#define RF_SUBDEV_ROLL_OFFSET 2.38
+
 #define NUM_RETRYS 3
 #define F_SUBDEV_TIMEOUT_US 1000 // front subdev response timeout in microseconds
 #define R_SUBDEV_TIMEOUT_US 2000 // longer for rear devs since they communicate with rclaws
 #define TIMEOUT_US_REC_DATA 150 // timeout waiting for data available after receiving DATA_INCOMING response
-#define REC_FLOAT_ERROR_RESPONSE -17349.21 // if error receiving a float, this value is returned
 // **** END SUB DEV DEFINES ****
 
 #endif /* CONFIG_PTX_H_ */

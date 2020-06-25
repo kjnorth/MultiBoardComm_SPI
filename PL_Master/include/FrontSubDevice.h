@@ -5,22 +5,24 @@
  * derived from SubDev class
  */
 
-// do i need to include "SubDevice.h" ???
-#include "SubDevice.h"
-
 #ifndef FRONT_SUB_DEVICE_H_
 #define FRONT_SUB_DEVICE_H_
+
+#include "SubDevice.h"
 
 class FrontSubDev: public SubDev {
   public:
     // **** PUBLIC FUNCTIONS ****
     FrontSubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeoutUs);
-    float ReadPitch(void);
-    float ReadRoll(void);
-    void DisableSolenoids(void);
-    void EnableSolenoidA(void);
-    void EnableSolenoidC(void);
-    void EnableSolenoidE(void);
+    bool DisableSolenoids(void);
+    bool EnableSolenoidA(void);
+    bool EnableSolenoidC(void);
+    bool EnableSolenoidE(void);
+    bool CommandLaser(bool on_off); // true turns laser ON
+    bool ReadPitch(void);
+    bool ReadRoll(void);
+    float GetPitch(void);
+    float GetRoll(void);
     bool ReadSolenoidStatus(void);
     bool IsSolenoidAIn(void);
     bool IsSolenoidAOut(void);
@@ -32,10 +34,12 @@ class FrontSubDev: public SubDev {
 
   private:
     // **** PRIVATE MEMBER VARIABLES ****
-    uint8_t m_solStatusByte;
-    uint8_t m_solAStatus; // 0 = OUT, 1 = IN
-    uint8_t m_solCStatus; // 0 = OUT, 1 = IN
-    uint8_t m_solEStatus; // 0 = OUT, 1 = IN
+    // 0 in bitN means solN is OUT, 1 in bitN means solN is IN
+    uint8_t m_solStatus;
+    float m_pitch;
+    float m_roll;
+    float m_pitchOffset;
+    float m_rollOffset;
     // **** END PRIVATE MEMBER VARIABLES ****
 
     // **** PRIVATE STRUCTS ****

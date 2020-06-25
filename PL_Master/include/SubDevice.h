@@ -23,25 +23,10 @@ typedef enum {
   ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
 } subdev_response_t;
 
-// TODO: set this enum up in such a way that front and rear cmds never share the same value
-// commands for front and rear sub devices
-typedef enum {
-  // probably add 'init' cmd as the first one
-  // front sub dev cmds
-  SOLS_DISABLE=1, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
-  LASER_DISABLE, LASER_ENABLE,
-  GET_PITCH, GET_ROLL, GET_SOL_STATUS,
-  // rear sub dev cmds
-  M5_STOP, M5_FORWARD, M5_REVERSE,
-  TR_LATCH, TR_UNLATCH,
-  GET_SW_STATUS,
-} subdev_cmd_t;
-
 class SubDev {
   public:
     // **** PUBLIC FUNCTIONS ****
     SubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeoutUs);
-    subdev_response_t WriteCmd(subdev_cmd_t cmd);
     // **** END PUBLIC FUNCTIONS ****
 
   protected:
@@ -59,7 +44,28 @@ class SubDev {
     } subdev_byte_packet_t;
     // **** END PROTECTED STRUCTS ****
 
+    // **** PROTECTED ENUMS ****
+    // TODO: this enum should really be split into two, and placed in the proper
+    // derived class. I don't think it will matter if cmd values overlap once
+    // you do this because it's not possible for rear subdev to write front cmd
+    // since it wont exist in the scope of that class
+    // commands for front and rear sub devices
+    typedef enum {
+      // front sub dev cmds
+      INIT_LF=1, INIT_RF,
+      SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
+      LASER_DISABLE, LASER_ENABLE,
+      GET_PITCH, GET_ROLL, GET_SOL_STATUS,
+      // rear sub dev cmds
+      INIT_LR, INIT_RR,
+      M5_STOP, M5_FORWARD, M5_REVERSE,
+      TR_LATCH, TR_UNLATCH,
+      GET_SW_STATUS,
+    } subdev_cmd_t;
+    // **** END PROTECTED ENUMS ****
+
     // **** PROTECTED FUNCTIONS ****
+    subdev_response_t WriteCmd(subdev_cmd_t cmd);
     bool RecDataOrTimeout(void);
     uint16_t GetCRC16(unsigned char *buf, int nBytes);
     // **** END PROTECTED FUNCTIONS ****
