@@ -18,11 +18,6 @@ typedef enum {
   LEFT_FRONT, RIGHT_FRONT, LEFT_REAR, RIGHT_REAR
 } subdev_id_t;
 
-// all sub devices respond to commands with these bytes
-typedef enum {
-  ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
-} subdev_response_t;
-
 class SubDev {
   public:
     // **** PUBLIC FUNCTIONS ****
@@ -45,6 +40,10 @@ class SubDev {
     // **** END PROTECTED STRUCTS ****
 
     // **** PROTECTED ENUMS ****
+    // all sub devices respond to commands with these bytes
+    typedef enum {
+      ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
+    } subdev_response_t;
     // TODO: this enum should really be split into two, and placed in the proper
     // derived class. I don't think it will matter if cmd values overlap once
     // you do this because it's not possible for rear subdev to write front cmd

@@ -22,7 +22,7 @@ SubDev::SubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeoutUs) {
  * @Param - device: device to communicate with
  * @Param - cmd: the command being sent
  */
-subdev_response_t SubDev::WriteCmd(subdev_cmd_t cmd) {
+SubDev::subdev_response_t SubDev::WriteCmd(subdev_cmd_t cmd) {
   subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
   ConfigPacket(packet, cmd);
   uint8_t trys = NUM_RETRYS;
@@ -81,7 +81,7 @@ uint16_t SubDev::GetCRC16(unsigned char *buf, int nBytes) {
  * @Desc: reads a byte if available in the timeout duration
  * @Return: byte read, or 0 if timeout
  */
-subdev_response_t SubDev::ReadByteOrTimeout(void) {
+SubDev::subdev_response_t SubDev::ReadByteOrTimeout(void) {
   uint32_t start = micros();
   while (!COMM_BUS.available()) {
     if (micros() - start >= m_timeout) {
