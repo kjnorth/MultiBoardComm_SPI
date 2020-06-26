@@ -4,7 +4,7 @@
 #include "..\lib\DataLog\DataLog.h"
 #include "..\lib\RoboClaw\RoboClaw.h"
 
-#define subdev_id_tX_PIN 2
+#define SUB_DEV_TX_PIN 2
 #define SUB_DEV_RX_PIN 3
 #define SUB_DEV_SS_PIN 4
 #define SUB_DEV_IRQ_PIN 5
@@ -58,7 +58,7 @@ uint16_t GetCRC16(unsigned char *buf, int nBytes);
 SoftwareSerial rclawSerial(ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN); // Rx, Tx - roboclaw serial port
 RoboClaw rclaw(&rclawSerial, ROBOCLAW_TIMEOUT_US);
 
-SoftwareSerial masterSerial(SUB_DEV_RX_PIN, subdev_id_tX_PIN); // Rx, Tx - master board serial bus
+SoftwareSerial masterSerial(SUB_DEV_RX_PIN, SUB_DEV_TX_PIN); // Rx, Tx - master board serial bus
 
 float testFloat;
 unsigned long curTime = 0;

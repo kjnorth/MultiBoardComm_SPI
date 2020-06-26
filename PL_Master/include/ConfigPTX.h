@@ -45,20 +45,27 @@ typedef struct {
 // **** END TRUCK DEFINES ****
 
 // **** SUB DEV DEFINES ****
-#define LF_SUBDEV_SS_PIN 2
-#define RF_SUBDEV_SS_PIN 3
-#define LR_SUBDEV_SS_PIN 4
-#define RR_SUBDEV_SS_PIN 5
+// pins
+#define F_SUBDEV_IRQ_PIN 2 // interrupt pin on mega, do not change
+#define R_SUBDEV_IRQ_PIN 3 // interrupt pin on mega, do not change
+#define LF_SUBDEV_SS_PIN 4
+#define RF_SUBDEV_SS_PIN 5
+#define LR_SUBDEV_SS_PIN 6
+#define RR_SUBDEV_SS_PIN 7
+#define COMM_BUS_TX_PIN 18
+#define COMM_BUS_RX_PIN 19
 
+// pitch / roll offsets
 #define LF_SUBDEV_PITCH_OFFSET 0.11
 #define LF_SUBDEV_ROLL_OFFSET 1.43
 #define RF_SUBDEV_PITCH_OFFSET 0.52
 #define RF_SUBDEV_ROLL_OFFSET 2.38
 
+// communication retrys and timeouts
 #define NUM_RETRYS 3
 #define F_SUBDEV_TIMEOUT_US 1000 // front subdev response timeout in microseconds
 #define R_SUBDEV_TIMEOUT_US 2000 // longer for rear devs since they communicate with rclaws
-#define TIMEOUT_US_REC_DATA 150 // timeout waiting for data available after receiving DATA_INCOMING response
+#define REC_DATA_TIMEOUT_US 150 // timeout waiting for data available after receiving DATA_INCOMING response
 // **** END SUB DEV DEFINES ****
 
 #endif /* CONFIG_PTX_H_ */

@@ -51,7 +51,7 @@ SubDev::subdev_response_t SubDev::WriteCmd(uint8_t cmd) {
 bool SubDev::RecDataOrTimeout(void) {
   uint32_t start = micros();
   while (!COMM_BUS.available()) {
-    if (micros()-start >= TIMEOUT_US_REC_DATA)
+    if (micros()-start >= REC_DATA_TIMEOUT_US)
       return false;
   }
   return true;
