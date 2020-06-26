@@ -31,12 +31,8 @@ typedef struct {
   uint8_t data;
   uint16_t crc;
 } subdev_byte_packet_t;
-
-/** 
- * commands sent from master board
- * @note: start cmd at 1 since timeout response is 0
- * @todo: make #define for cmd set if front board or rear board in config file
- */
+ 
+// commands sent from master board
 typedef enum {
   // front sub dev cmds
   INIT_LF=1, INIT_RF,

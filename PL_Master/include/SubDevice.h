@@ -44,27 +44,10 @@ class SubDev {
     typedef enum {
       ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
     } subdev_response_t;
-    // TODO: this enum should really be split into two, and placed in the proper
-    // derived class. I don't think it will matter if cmd values overlap once
-    // you do this because it's not possible for rear subdev to write front cmd
-    // since it wont exist in the scope of that class
-    // commands for front and rear sub devices
-    typedef enum {
-      // front sub dev cmds
-      INIT_LF=1, INIT_RF,
-      SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
-      LASER_DISABLE, LASER_ENABLE,
-      GET_PITCH, GET_ROLL, GET_SOL_STATUS,
-      // rear sub dev cmds
-      INIT_LR, INIT_RR,
-      M5_STOP, M5_FORWARD, M5_REVERSE,
-      TR_LATCH, TR_UNLATCH,
-      GET_SW_STATUS,
-    } subdev_cmd_t;
     // **** END PROTECTED ENUMS ****
 
     // **** PROTECTED FUNCTIONS ****
-    subdev_response_t WriteCmd(subdev_cmd_t cmd);
+    subdev_response_t WriteCmd(uint8_t cmd);
     bool RecDataOrTimeout(void);
     uint16_t GetCRC16(unsigned char *buf, int nBytes);
     // **** END PROTECTED FUNCTIONS ****
@@ -82,7 +65,7 @@ class SubDev {
     subdev_response_t ReadByteOrTimeout(void);
     void AssertSSLine(void);
     void ClearSSLine(void);
-    void ConfigPacket(subdev_cmd_packet_t *newCmd, subdev_cmd_t cmdByte);
+    void ConfigPacket(subdev_cmd_packet_t *newCmd, uint8_t cmdByte);
     // **** END PRIVATE FUNCTIONS ****
 };
 

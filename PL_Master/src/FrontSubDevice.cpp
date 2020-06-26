@@ -118,7 +118,7 @@ bool FrontSubDev::EnableSolenoidE(void) {
  * @Return: true if cmd successful, false if failure
  */
 bool FrontSubDev::CommandLaser(bool on_off) {
-  subdev_cmd_t cmd = on_off ? LASER_ENABLE : LASER_DISABLE;
+  front_subdev_cmd_t cmd = on_off ? LASER_ENABLE : LASER_DISABLE;
   subdev_response_t response = WriteCmd(cmd);
   if (response != SUCCESS) {
     LogInfo("CommandLaser - ERROR commanding laser on device %d\n", m_id);

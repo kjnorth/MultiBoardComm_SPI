@@ -22,7 +22,7 @@ SubDev::SubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeoutUs) {
  * @Param - device: device to communicate with
  * @Param - cmd: the command being sent
  */
-SubDev::subdev_response_t SubDev::WriteCmd(subdev_cmd_t cmd) {
+SubDev::subdev_response_t SubDev::WriteCmd(uint8_t cmd) {
   subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
   ConfigPacket(packet, cmd);
   uint8_t trys = NUM_RETRYS;
@@ -118,7 +118,7 @@ void SubDev::ClearSSLine(void) {
  * @Param - addr: unique address of sub device
  * @Param - cmdByte: byte corresponding to sub device command
  */
-void SubDev::ConfigPacket(subdev_cmd_packet_t *newCmd, subdev_cmd_t cmdByte) {
+void SubDev::ConfigPacket(subdev_cmd_packet_t *newCmd, uint8_t cmdByte) {
   newCmd->command = cmdByte;
   newCmd->crc = GetCRC16((unsigned char *)newCmd, sizeof(subdev_cmd_packet_t)-2);
 }

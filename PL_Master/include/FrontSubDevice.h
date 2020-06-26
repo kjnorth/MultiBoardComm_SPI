@@ -50,6 +50,15 @@ class FrontSubDev: public SubDev {
     } subdev_float_packet_t;
     // **** END PRIVATE STRUCTS ****
 
+    // **** PRIVATE ENUMS ****
+    typedef enum {
+      INIT_LF=1, INIT_RF,
+      SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
+      LASER_DISABLE, LASER_ENABLE,
+      GET_PITCH, GET_ROLL, GET_SOL_STATUS,
+    } front_subdev_cmd_t;
+    // **** END PRIVATE ENUMS ****
+
     // **** PRIVATE FUNCTIONS ****
 
     // **** END PRIVATE FUNCTIONS ****
