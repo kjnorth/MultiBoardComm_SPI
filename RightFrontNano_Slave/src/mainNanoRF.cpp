@@ -35,7 +35,7 @@ typedef struct {
 // commands sent from master board
 typedef enum {
   // front sub dev cmds
-  INIT_LF=1, INIT_RF,
+  NONE, INIT,
   SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
   LASER_DISABLE, LASER_ENABLE,
   GET_PITCH, GET_ROLL, GET_SOL_STATUS,
@@ -47,7 +47,7 @@ typedef enum {
 } subdev_cmd_t;
 
 typedef enum {
-  ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
+  UNKNOWN=0xE0, ERROR, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
 } subdev_response_t;
 
 void InitRoboclaw(void);
@@ -107,6 +107,9 @@ void ReadMasterCmd(void) {
       if (crcCalc == packet->crc) {
         // got uncorrupted data
         switch (packet->command) {
+          case INIT:
+            masterSerial.write(SUCCESS);
+            break;
           case M5_STOP:
             rclawSerial.listen();
             rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);

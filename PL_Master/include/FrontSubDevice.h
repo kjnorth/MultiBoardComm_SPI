@@ -52,7 +52,7 @@ class FrontSubDev: public SubDev {
 
     // **** PRIVATE ENUMS ****
     typedef enum {
-      INIT_LF=1, INIT_RF,
+      NONE, INIT,
       SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
       LASER_DISABLE, LASER_ENABLE,
       GET_PITCH, GET_ROLL, GET_SOL_STATUS,
