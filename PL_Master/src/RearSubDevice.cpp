@@ -17,24 +17,6 @@
 RearSubDev::RearSubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeoutUs)
   : SubDev{id, ssPin, responseTimeoutUs} {
   m_swStatus = 0;
-  subdev_response_t response;
-  switch (id) {
-    case LEFT_REAR:
-      response = WriteCmd(INIT_LR);
-      break;
-    case RIGHT_REAR:
-      response = WriteCmd(INIT_RR);
-      break;
-    default:
-      LogInfo("RearSubDev - ERROR id %d is not a REAR device", id);
-      break;
-  }
-  if (response != SUCCESS) {
-    LogInfo("RearSubDev - ERROR initialization of device %d failed\n", id);
-  }
-  else {
-    LogInfo("RearSubDev - SUCCESS initialization of device %d succeeded\n", id);
-  }
 }
 
 /** 

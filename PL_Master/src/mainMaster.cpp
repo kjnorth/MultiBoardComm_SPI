@@ -30,10 +30,10 @@ RearSubDev rightRear(RIGHT_REAR, RR_SUBDEV_SS_PIN, R_SUBDEV_TIMEOUT_US);
 
 void setup() {
   Serial.begin(115200);
-  COMM_BUS.begin(115200);
   LogInfo("Master boots up\n");
+  COMM_BUS.begin(115200);
   pinMode(TX_BTN_IN, INPUT_PULLUP);
-  InitRadio();
+  // InitRadio();
 }
 
 unsigned long curTime = 0;

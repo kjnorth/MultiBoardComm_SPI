@@ -19,27 +19,18 @@ FrontSubDev::FrontSubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeout
   m_solStatus = 0;
   m_pitch = 0.0;
   m_roll = 0.0;
-  subdev_response_t response;
   switch (id) {
     case LEFT_FRONT:
       m_pitchOffset = LF_SUBDEV_PITCH_OFFSET;
       m_rollOffset = LF_SUBDEV_ROLL_OFFSET;
-      response = WriteCmd(INIT_LF);
       break;
     case RIGHT_FRONT:
       m_pitchOffset = RF_SUBDEV_PITCH_OFFSET;
       m_rollOffset = RF_SUBDEV_ROLL_OFFSET;
-      response = WriteCmd(INIT_RF);
       break;
     default:
       LogInfo("FrontSubDev - ERROR id %d is not a FRONT device", id);
       break;
-  }
-  if (response != SUCCESS) {
-    LogInfo("FrontSubDev - ERROR initialization of device %d failed\n", id);
-  }
-  else {
-    LogInfo("FrontSubDev - SUCCESS initialization of device %d succeeded\n", id);
   }
 }
 
