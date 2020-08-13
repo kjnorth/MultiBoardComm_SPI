@@ -14,6 +14,9 @@
 #define ROBOCLAW_TX_PIN 6
 #define ROBOCLAW_RX_PIN 7
 
+#define CLK_SPEED 16000000 // 16MHz
+#define PRESCALER_T1 1 // NOTE: If changing this val, must change TCCR1B in InitTimer1ISR() appropriately
+
 // all sub devices receive commands in the format of this typedef
 typedef struct {
   uint8_t command;
@@ -54,6 +57,7 @@ void InitRoboclaw(void);
 void ReadMasterCmd(void);
 void SendFloat(float data);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
+void InitTimer1ISR(unsigned int freqHz);
 
 SoftwareSerial rclawSerial(ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN); // Rx, Tx - roboclaw serial port
 RoboClaw rclaw(&rclawSerial, ROBOCLAW_TIMEOUT_US);
@@ -77,15 +81,22 @@ void setup() {
    * so must start rclaw port listening when asking for encoders / 
    * motor current etc */
   masterSerial.listen();
+  noInterrupts();
+  InitTimer1ISR(5000);
+  interrupts();
+}
+
+ISR(TIMER1_COMPA_vect) {
+  ReadMasterCmd();
 }
 
 void loop() {
   curTime = millis();
-  ReadMasterCmd();
+  // ReadMasterCmd();
 
   if (curTime - preTime >= 1000) {
     preTime = curTime;
-    // LogInfo("byte received 0x%X\r\n", rec);
+    LogInfo("time %lu\r\n", millis());
   }
 }
 
@@ -99,32 +110,40 @@ void ReadMasterCmd(void) {
     // communication to this device is OPEN
     if (masterSerial.available()) {
       // data from the master is available
-      subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
-      masterSerial.readBytes((uint8_t *)packet, sizeof(subdev_cmd_packet_t));
-      uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(subdev_cmd_packet_t)-2);
-      static float data = -3.29;
+      // subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
+      // masterSerial.readBytes((uint8_t *)packet, sizeof(subdev_cmd_packet_t));
+      // uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(subdev_cmd_packet_t)-2);
+      
+      // NOTE: doing above 3 lines of code without mallocing
+      subdev_cmd_packet_t packet;
+      unsigned char *buf = (unsigned char *)&packet;
+      masterSerial.readBytes(buf, sizeof(subdev_cmd_packet_t));
+      uint16_t crcCalc = GetCRC16(buf, sizeof(subdev_cmd_packet_t)-2);
+      uint16_t crc = (uint16_t)((buf[sizeof(subdev_cmd_packet_t)-1] << 8) | buf[sizeof(subdev_cmd_packet_t)-2]);
+      uint8_t command = buf[0];
 
-      if (crcCalc == packet->crc) {
+      static float data = -3.29;
+      if (crcCalc == /*packet->*/crc) {
         // got uncorrupted data
-        switch (packet->command) {
+        switch (/*packet->*/command) {
           case INIT:
             masterSerial.write(SUCCESS);
             break;
           case M5_STOP:
             rclawSerial.listen();
-            rclaw.ForwardM2(ROBOCLAW_ADDRESS, 0);
+            rclaw.ForwardM1(ROBOCLAW_ADDRESS, 0);
             masterSerial.listen();
             masterSerial.write(SUCCESS);
             break;
           case M5_FORWARD:
             rclawSerial.listen();
-            rclaw.ForwardM2(ROBOCLAW_ADDRESS, 25);
+            rclaw.ForwardM1(ROBOCLAW_ADDRESS, 25);
             masterSerial.listen();
             masterSerial.write(SUCCESS);
             break;
           case M5_REVERSE:
             rclawSerial.listen();
-            rclaw.BackwardM2(ROBOCLAW_ADDRESS, 25);
+            rclaw.BackwardM1(ROBOCLAW_ADDRESS, 25);
             masterSerial.listen();
             masterSerial.write(SUCCESS);
             break;
@@ -141,7 +160,7 @@ void ReadMasterCmd(void) {
         // data got corrupted
         masterSerial.write(CRC_ERROR);
       }
-      free(packet);
+      // free(packet);
     }
   }
   // else {} // communication to this device is CLOSED
@@ -199,4 +218,19 @@ uint16_t GetCRC16(unsigned char *buf, int nBytes) {
 		}
 	}
  	return crc;
+}
+
+// With 64 prescaler, min freq is 3.8 Hz
+void InitTimer1ISR(unsigned int freqHz) {
+  TCCR1A = 0; // set this register to 0
+  TCCR1B = 0; // set this register to 0
+  TCNT1 = 0; // init counter value to 0
+  OCR1A = (uint16_t)(CLK_SPEED / (freqHz * PRESCALER_T1)) - 1; // set compare match register for increments at
+                                                               // freqHz, must be less than 65536 for timer 1
+  TCCR1B |= (1 << WGM12); // turn on CTC (Clear Timer on Compare Match) mode
+  // NOTE: comment/uncomment TCCR1B to match PRESCALER_T1 #define
+  TCCR1B |= (1 << CS10); // CS10 bit set for 1 prescaler
+  // TCCR1B |= (1 << CS11); // Set CS11 bit for 8 prescaler
+  // TCCR1B |= (1 << CS11) | (1 << CS10); // Set CS11 and CS10 bits for 64 prescaler
+  TIMSK1 |= (1 << OCIE1A); // enable the timer compare interrupt
 }
