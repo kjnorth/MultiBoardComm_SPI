@@ -4,9 +4,9 @@
 #include "..\lib\DataLog\DataLog.h"
 #include "..\lib\RoboClaw\RoboClaw.h"
 
-#define SUB_DEV_TX_PIN 2
-#define SUB_DEV_RX_PIN 3
-#define SUB_DEV_SS_PIN 4
+#define SUB_DEV_SS_PIN 2
+#define SUB_DEV_TX_PIN 3
+#define SUB_DEV_RX_PIN 4
 #define SUB_DEV_IRQ_PIN 5
 
 #define ROBOCLAW_ADDRESS 0x80

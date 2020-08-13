@@ -25,7 +25,7 @@ class RearSubDev: public SubDev {
     bool IsM5DumpPosLimitTriggered(void);
     // **** END PUBLIC FUNCTIONS ****
 
-  private:
+  // private:
     // **** PRIVATE MEMBER VARIABLES ****
     // 0 in bitN means swN is OFF, 1 in bitN means swN is ON
     uint8_t m_swStatus;

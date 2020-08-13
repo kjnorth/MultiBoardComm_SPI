@@ -46,6 +46,7 @@ void loop() {
 
   IsConnected();
   if (curTime - preSendTime >= 100) { // write data to truck PRX at 100Hz frequency
+    preSendTime = curTime;
     // truck comm
     // UpdateTruckData();
     // right front nano comm
@@ -55,25 +56,28 @@ void loop() {
       }
       /** NOTE: SAVE CODE BELOW ******************
       static bool flip = true;
-      subdev_response_t response;
+      SubDev::subdev_response_t response;
       if (flip) {
-        response = WriteCmd(RIGHT_REAR, M5_FORWARD);
+        // NOTE: code was written on right front board to test m5 run/stop cmds. Then
+        // I abstracted things to rightRear class before buidling a whole new project,
+        // so now to run the test I write a rightRear cmd to a rightFront board.
+        response = rightFront.WriteCmd(rightRear.M5_FORWARD);
       }
       else {
-        response = WriteCmd(RIGHT_REAR, M5_STOP);
+        response = rightFront.WriteCmd(rightRear.M5_STOP);
       }
       flip = !flip;
       switch (response) {
-        case ERROR:
+        case SubDev::ERROR:
           LogInfo("Tx ERROR\n");
           break;
-        case SUCCESS:
+        case SubDev::SUCCESS:
           LogInfo("Tx SUCCESS\n");
           break;
-        case CMD_ERROR:
+        case SubDev::CMD_ERROR:
           LogInfo("Tx CMD ERROR\n");
           break;
-        case CRC_ERROR:
+        case SubDev::CRC_ERROR:
           LogInfo("Tx CRC ERROR\n");
           break;
         default:
@@ -82,7 +86,6 @@ void loop() {
       }
       // **********************************************/
     }
-    preSendTime = curTime;
   }
 
   if (curTime - preLogTime >= 1000) {

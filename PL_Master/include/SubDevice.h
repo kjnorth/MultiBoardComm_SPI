@@ -24,7 +24,7 @@ class SubDev {
     SubDev(subdev_id_t id, uint8_t ssPin, uint16_t responseTimeoutUs);
     // **** END PUBLIC FUNCTIONS ****
 
-  protected:
+  // protected:
     // **** PROTECTED MEMBER VARIABLES ****
     subdev_id_t m_id;
     uint8_t m_ssPin;
@@ -42,7 +42,7 @@ class SubDev {
     // **** PROTECTED ENUMS ****
     // all sub devices respond to commands with these bytes
     typedef enum {
-      ERROR=0xE0, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
+      UNKNOWN=0xE0, ERROR, CRC_ERROR, CMD_ERROR, SUCCESS, DATA_INCOMING,
     } subdev_response_t;
     // **** END PROTECTED ENUMS ****
 
