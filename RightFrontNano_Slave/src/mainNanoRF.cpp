@@ -64,10 +64,6 @@ RoboClaw rclaw(&rclawSerial, ROBOCLAW_TIMEOUT_US);
 
 SoftwareSerial masterSerial(SUB_DEV_RX_PIN, SUB_DEV_TX_PIN); // Rx, Tx - master board serial bus
 
-float testFloat;
-unsigned long curTime = 0;
-static unsigned long preTime = 0;
-
 #define TEST 0
 void setup() {
   Serial.begin(115200);
@@ -82,17 +78,27 @@ void setup() {
    * motor current etc */
   masterSerial.listen();
   noInterrupts();
-  InitTimer1ISR(5000);
+  // InitTimer1ISR(5000);
   interrupts();
 }
 
 ISR(TIMER1_COMPA_vect) {
-  ReadMasterCmd();
+
 }
+
+float testFloat;
+unsigned long curTime = 0;
+static unsigned long preTime = 0;
+static unsigned long preImuSampleTime = 0;
 
 void loop() {
   curTime = millis();
-  // ReadMasterCmd();
+  ReadMasterCmd();
+
+  if (curTime - preImuSampleTime >= 15) {
+    delayMicroseconds(3500); // simulate imu read and comp filter execution time
+    preImuSampleTime = curTime;
+  }
 
   if (curTime - preTime >= 1000) {
     preTime = curTime;
@@ -110,22 +116,14 @@ void ReadMasterCmd(void) {
     // communication to this device is OPEN
     if (masterSerial.available()) {
       // data from the master is available
-      // subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
-      // masterSerial.readBytes((uint8_t *)packet, sizeof(subdev_cmd_packet_t));
-      // uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(subdev_cmd_packet_t)-2);
-      
-      // NOTE: doing above 3 lines of code without mallocing
-      subdev_cmd_packet_t packet;
-      unsigned char *buf = (unsigned char *)&packet;
-      masterSerial.readBytes(buf, sizeof(subdev_cmd_packet_t));
-      uint16_t crcCalc = GetCRC16(buf, sizeof(subdev_cmd_packet_t)-2);
-      uint16_t crc = (uint16_t)((buf[sizeof(subdev_cmd_packet_t)-1] << 8) | buf[sizeof(subdev_cmd_packet_t)-2]);
-      uint8_t command = buf[0];
+      subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
+      masterSerial.readBytes((uint8_t *)packet, sizeof(subdev_cmd_packet_t));
+      uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(subdev_cmd_packet_t)-2);
 
       static float data = -3.29;
-      if (crcCalc == /*packet->*/crc) {
+      if (crcCalc == packet->crc) {
         // got uncorrupted data
-        switch (/*packet->*/command) {
+        switch (packet->command) {
           case INIT:
             masterSerial.write(SUCCESS);
             break;
@@ -160,7 +158,7 @@ void ReadMasterCmd(void) {
         // data got corrupted
         masterSerial.write(CRC_ERROR);
       }
-      // free(packet);
+      free(packet);
     }
   }
   // else {} // communication to this device is CLOSED
