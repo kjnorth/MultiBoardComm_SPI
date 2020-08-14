@@ -18,9 +18,6 @@ RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 void setup() {
   Serial.begin(115200);
 
-  rtt.SwitchStatus = 0x9D;
-  rtt.SolenoidStatus = 0x5E;
-
 #ifdef RF_USE_IRQ_PIN
   pinMode(RF_IRQ_PIN, INPUT);
 #endif
@@ -31,9 +28,8 @@ void setup() {
     // RF24 library begin() function modified to enable PRX mode
     radio.setAddressWidth(5); // set address size to 5 bytes
     radio.setChannel(RF_CHANNEL); // set communication channel
-    radio.setPayloadSize(NUM_TTR_BYTES); // set payload size to number of bytes being RECEIVED
     radio.enableAckPayload(); // enable ability to add payload sent with auto ACK
-    radio.enableDynamicAck();
+    radio.enableDynamicPayloads(); // must be enabled to attach payload to ACK
     radio.setPALevel(RF24_PA_LOW); // set power amplifier level. Using LOW for tests on bench. Should use HIGH on PL/Truck
     radio.setDataRate(RF24_1MBPS); // set data rate to most reliable speed
     radio.openReadingPipe(0, RF_PRX_READ_ADDR);
@@ -41,6 +37,11 @@ void setup() {
     radio.startListening(); // PRX now needs to start listening for packets
     Serial.println("PRX initialization successful");
   }
+  rtt.SwitchStatus = 0x9D;
+  rtt.SolenoidStatus = 0x5E;
+  rtt.Pitch = 1.09;
+  rtt.Roll = 5.49;
+  rtt.IsDoneInitializing = true;
 }
 
 unsigned long curTime = millis();
@@ -65,6 +66,8 @@ void loop() {
        * iteration of the main loop */
       rtt.SwitchStatus++;
       rtt.SolenoidStatus++;
+      rtt.Pitch += 0.1;
+      rtt.Roll += 0.03;
       radio.writeAckPayload(0, &rtt, NUM_RTT_BYTES);
     }
 #ifdef RF_USE_IRQ_PIN

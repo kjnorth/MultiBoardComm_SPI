@@ -20,6 +20,9 @@ typedef struct
 {
 	uint8_t		SwitchStatus;
 	uint8_t		SolenoidStatus;
+	float 		Pitch;
+	float			Roll;
+	bool 			IsDoneInitializing;
 } RX_TO_TX;
 
 #define NUM_TTR_BYTES sizeof(TX_TO_RX)
