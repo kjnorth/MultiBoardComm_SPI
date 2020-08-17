@@ -21,6 +21,7 @@ class FrontSubDev: public SubDev {
     bool CommandLaser(bool on_off); // true turns laser ON
     bool ReadPitch(void);
     bool ReadRoll(void);
+    bool ReadAttitude(void);
     float GetPitch(void);
     float GetRoll(void);
     bool ReadSolenoidStatus(void);
@@ -44,18 +45,30 @@ class FrontSubDev: public SubDev {
 
     // **** PRIVATE STRUCTS ****
     // sub devices send pitch and roll data in this form
-    typedef struct {
+    typedef struct { // NOTE: this may need to be moved up to SubDevice parent class to receive M5 encoder data
       float data;
       uint16_t crc;
     } subdev_float_packet_t;
+
+    typedef struct {
+      float pitch;
+      float roll;
+      uint16_t crc;
+    } subdev_attitude_packet_t;
     // **** END PRIVATE STRUCTS ****
 
     // **** PRIVATE ENUMS ****
     typedef enum {
+      // front sub dev cmds
       NONE, INIT,
       SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
       LASER_DISABLE, LASER_ENABLE,
-      GET_PITCH, GET_ROLL, GET_SOL_STATUS,
+      GET_PITCH, GET_ROLL, GET_ATTITUDE, GET_SOL_STATUS,
+      // rear sub dev cmds // NOTE added here for ease-of-use in test project
+      INIT_LR, INIT_RR,
+      M5_STOP, M5_FORWARD, M5_REVERSE,
+      TR_LATCH, TR_UNLATCH,
+      GET_SW_STATUS,
     } front_subdev_cmd_t;
     // **** END PRIVATE ENUMS ****
 

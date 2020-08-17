@@ -186,6 +186,42 @@ bool FrontSubDev::ReadRoll() {
 
 /** 
  * @Author: Kodiak North 
+ * @Date: 2020-08-17 10:07:41 
+ * @Desc: requests pitch and roll from sub device
+ * @Return: true if data received successfully, false otherwise 
+ */
+bool FrontSubDev::ReadAttitude(void) {
+  subdev_response_t response = WriteCmd(GET_ATTITUDE);
+  if (response != DATA_INCOMING) {
+    LogInfo(F("ReadAttitude - ERROR: sub dev %d not accepting attitude request, response 0x%X\n"), m_id, response);
+    return false;
+  }
+
+  if (!RecDataOrTimeout()) {
+    LogInfo("ReadAttitude - ERROR: sub dev %d didn't send data after responding to request cmd\n", m_id);
+    return false;
+  }
+
+  subdev_attitude_packet_t *attitudePacket = (subdev_attitude_packet_t*)malloc(sizeof(subdev_attitude_packet_t));
+  COMM_BUS.readBytes((uint8_t *)attitudePacket, sizeof(subdev_attitude_packet_t));
+  float pitch = attitudePacket->pitch;
+  float roll = attitudePacket->roll;
+  uint16_t crcRec = attitudePacket->crc;
+  uint16_t crcCalc = GetCRC16((unsigned char *)attitudePacket, sizeof(subdev_attitude_packet_t)-2);
+  free(attitudePacket);
+
+  if (crcCalc != crcRec) {
+    LogInfo("ReadAttitude - ERROR: data from sub dev %d got corrupted\n", m_id);
+    return false;
+  }
+  // wait until we pass all error checks to update the member variables
+  m_pitch = pitch;
+  m_roll = roll;
+  return true;
+}
+
+/** 
+ * @Author: Kodiak North 
  * @Date: 2020-06-25 14:42:34 
  * @Return: pitch from most recent read
  * with offset subtracted

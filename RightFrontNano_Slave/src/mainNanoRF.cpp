@@ -29,6 +29,12 @@ typedef struct {
   uint16_t crc;
 } subdev_float_packet_t;
 
+typedef struct {
+  float pitch;
+  float roll;
+  uint16_t crc;
+} subdev_attitude_packet_t;
+
 // all sub devices send switch or solenoid status' in this form
 typedef struct {
   uint8_t data;
@@ -41,7 +47,7 @@ typedef enum {
   NONE, INIT,
   SOLS_DISABLE, SOLA_ENABLE, SOLC_ENABLE, SOLE_ENABLE,
   LASER_DISABLE, LASER_ENABLE,
-  GET_PITCH, GET_ROLL, GET_SOL_STATUS,
+  GET_PITCH, GET_ROLL, GET_ATTITUDE, GET_SOL_STATUS,
   // rear sub dev cmds
   INIT_LR, INIT_RR,
   M5_STOP, M5_FORWARD, M5_REVERSE,
@@ -56,6 +62,7 @@ typedef enum {
 void InitRoboclaw(void);
 void ReadMasterCmd(void);
 void SendFloat(float data);
+void SendAttitude(float pitch, float roll);
 uint16_t GetCRC16(unsigned char *buf, int nBytes);
 void InitTimer1ISR(unsigned int freqHz);
 
@@ -120,7 +127,8 @@ void ReadMasterCmd(void) {
       masterSerial.readBytes((uint8_t *)packet, sizeof(subdev_cmd_packet_t));
       uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(subdev_cmd_packet_t)-2);
 
-      static float data = -3.29;
+      static float pitch = -3.29;
+      static float roll = 42.4;
       if (crcCalc == packet->crc) {
         // got uncorrupted data
         switch (packet->command) {
@@ -147,21 +155,32 @@ void ReadMasterCmd(void) {
             break;
           case GET_PITCH:
             masterSerial.write(DATA_INCOMING);
-            SendFloat(data++);
+            SendFloat(pitch++);
+            break;
+          case GET_ATTITUDE:
+            masterSerial.write(DATA_INCOMING);
+            SendAttitude(pitch++, roll--);
             break;
           default:
             masterSerial.write(CMD_ERROR);
+            masterSerial.flush();
             break;
         }
       }
       else {
         // data got corrupted
         masterSerial.write(CRC_ERROR);
+        masterSerial.flush();
       }
       free(packet);
     }
   }
-  // else {} // communication to this device is CLOSED
+  else { // communication to this device is CLOSED, clear rx buffer
+    // turn into ClearRxBuffer() function
+    if (masterSerial.available()) { // should I loop and clear all data in buffer, or only one byte at a time?
+      masterSerial.read(); // read a byte but do not save it
+    }
+  }
 }
 
 void SendFloat(float data) {
@@ -170,6 +189,20 @@ void SendFloat(float data) {
   floatPacket->crc = GetCRC16((unsigned char *)floatPacket, sizeof(subdev_float_packet_t)-2);
   masterSerial.write((unsigned char *)floatPacket, sizeof(subdev_float_packet_t));
   free(floatPacket);
+}
+
+/** 
+ * @Author: Kodiak North 
+ * @Date: 2020-08-17 10:26:46 
+ * @Desc: Sends attitude (pitch and roll) to master board 
+ */
+void SendAttitude(float pitch, float roll) {
+  subdev_attitude_packet_t *attitudePacket = (subdev_attitude_packet_t*)malloc(sizeof(subdev_attitude_packet_t));
+  attitudePacket->pitch = pitch;
+  attitudePacket->roll = roll;
+  attitudePacket->crc = GetCRC16((unsigned char *)attitudePacket, sizeof(subdev_attitude_packet_t)-2);
+  masterSerial.write((unsigned char *)attitudePacket, sizeof(subdev_attitude_packet_t));
+  free(attitudePacket);
 }
 
 /** 

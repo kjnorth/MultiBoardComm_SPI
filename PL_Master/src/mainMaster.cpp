@@ -25,7 +25,7 @@ RX_TO_TX rtt;
 RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 
 FrontSubDev leftFront(LEFT_FRONT, LF_SUBDEV_SS_PIN, F_SUBDEV_TIMEOUT_US);
-FrontSubDev rightFront(RIGHT_FRONT, RF_SUBDEV_SS_PIN, 2000); // to test REAR subdev m5 run/stop cmds F_SUBDEV_TIMEOUT_US);
+FrontSubDev rightFront(RIGHT_FRONT, RF_SUBDEV_SS_PIN, 2500); // to test REAR subdev m5 run/stop cmds F_SUBDEV_TIMEOUT_US); // increase further for sending 2 floats with 1 command
 RearSubDev leftRear(LEFT_REAR, LR_SUBDEV_SS_PIN, R_SUBDEV_TIMEOUT_US);
 RearSubDev rightRear(RIGHT_REAR, RR_SUBDEV_SS_PIN, R_SUBDEV_TIMEOUT_US);
 
@@ -48,23 +48,25 @@ void loop() {
   if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
     preSendTime = curTime;
     // truck comm
-    UpdateTruckData();
+    UpdateTruckData(); // use a timer ISR to set a flag to update truck data at 200 Hz, and also run BLE update data
+                      // NOTE that BLE will likely be a different, professional remote so leave on hold for now
     // right front nano comm
     if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
-      // if (rightFront.ReadPitch()) {
-      //   LogInfo("pitch received ", rightFront.GetPitch(), 2, true);
-      // }
-      //** NOTE: SAVE CODE BELOW ******************
+      if (rightFront.ReadAttitude()) {
+        LogInfo("data: pitch ", rightFront.GetPitch(), 2);
+        LogInfo(", roll ", rightFront.GetRoll(), 2, true);
+      }
+      /** NOTE: SAVE CODE BELOW ******************
       static bool flip = true;
       SubDev::subdev_response_t response;
       if (flip) {
         // NOTE: code was written on right front board to test m5 run/stop cmds. Then
         // I abstracted things to rightRear class before buidling a whole new project,
         // so now to run the test I write a rightRear cmd to a rightFront board.
-        response = rightFront.WriteCmd(14); // 14 is M5 forward cmd on mainNanoRF board
+        response = rightFront.WriteCmd(M5_FORWARD);
       }
       else {
-        response = rightFront.WriteCmd(13); // 13 is M5 stop cmd on mainNanoRF board
+        response = rightFront.WriteCmd(M5_STOP);
       }
       flip = !flip;
       switch (response) {
@@ -88,13 +90,13 @@ void loop() {
     }
   }
 
-  if (curTime - preLogTime >= 1000) {
-    LogInfo("pitch ", rtt.Pitch, 2);
-    LogInfo(", roll ", rtt.Roll, 2);
-    LogInfo(F(", switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
-                rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
-    preLogTime = curTime;
-  }
+  // if (curTime - preLogTime >= 1000) {
+  //   LogInfo("pitch ", rtt.Pitch, 2);
+  //   LogInfo(", roll ", rtt.Roll, 2);
+  //   LogInfo(F(", switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
+  //               rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
+  //   preLogTime = curTime;
+  // }
 }
 
 /** 
