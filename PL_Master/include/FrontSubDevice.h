@@ -33,7 +33,7 @@ class FrontSubDev: public SubDev {
     bool IsSolenoidEOut(void);
     // **** END PUBLIC FUNCTIONS ****
 
-  private:
+  // private:
     // **** PRIVATE MEMBER VARIABLES ****
     // 0 in bitN means solN is OUT, 1 in bitN means solN is IN
     uint8_t m_solStatus;

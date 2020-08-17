@@ -119,10 +119,10 @@ void loop() {
  * @Desc: retrieves commands from the master board 
  */
 void ReadMasterCmd(void) {
-  if (digitalRead(SUB_DEV_SS_PIN) == HIGH) {
-    // communication to this device is OPEN
-    if (masterSerial.available()) {
-      // data from the master is available
+  if (masterSerial.available()) {
+    // data from the master is available
+    if (digitalRead(SUB_DEV_SS_PIN) == HIGH) {
+      // communication to this device is OPEN
       subdev_cmd_packet_t *packet = (subdev_cmd_packet_t*)malloc(sizeof(subdev_cmd_packet_t));
       masterSerial.readBytes((uint8_t *)packet, sizeof(subdev_cmd_packet_t));
       uint16_t crcCalc = GetCRC16((unsigned char *)packet, sizeof(subdev_cmd_packet_t)-2);
@@ -174,11 +174,11 @@ void ReadMasterCmd(void) {
       }
       free(packet);
     }
-  }
-  else { // communication to this device is CLOSED, clear rx buffer
-    // turn into ClearRxBuffer() function
-    if (masterSerial.available()) { // should I loop and clear all data in buffer, or only one byte at a time?
+    else { // communication to this device is CLOSED, clear rx buffer
+      // turn into ClearRxBuffer() function
+      // should I loop and clear all data in buffer, or only one byte at a time?
       masterSerial.read(); // read a byte but do not save it
+      // LogInfo("clearing data not sent to me\n");
     }
   }
 }

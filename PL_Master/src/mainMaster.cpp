@@ -52,40 +52,45 @@ void loop() {
                       // NOTE that BLE will likely be a different, professional remote so leave on hold for now
     // right front nano comm
     if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
-      if (rightFront.ReadAttitude()) {
-        LogInfo("data: pitch ", rightFront.GetPitch(), 2);
-        LogInfo(", roll ", rightFront.GetRoll(), 2, true);
-      }
-      /** NOTE: SAVE CODE BELOW ******************
+      // if (rightFront.ReadAttitude()) {
+      //   LogInfo("data: pitch ", rightFront.GetPitch(), 2);
+      //   LogInfo(", roll ", rightFront.GetRoll(), 2, true);
+      // }
+      //** NOTE: SAVE CODE BELOW ******************
       static bool flip = true;
       SubDev::subdev_response_t response;
       if (flip) {
         // NOTE: code was written on right front board to test m5 run/stop cmds. Then
         // I abstracted things to rightRear class before buidling a whole new project,
         // so now to run the test I write a rightRear cmd to a rightFront board.
-        response = rightFront.WriteCmd(M5_FORWARD);
+        // response = rightFront.WriteCmd(rightFront.M5_FORWARD);
+        if (rightFront.ReadAttitude()) {
+          LogInfo("from right front: pitch ", rightFront.GetPitch(), 2);
+          LogInfo(", roll ", rightFront.GetRoll(), 2, true);
+        }
       }
       else {
-        response = rightFront.WriteCmd(M5_STOP);
+        // response = rightFront.WriteCmd(rightFront.M5_STOP);
+        leftFront.ReadAttitude();
       }
       flip = !flip;
-      switch (response) {
-        case SubDev::ERROR:
-          LogInfo("Tx ERROR\n");
-          break;
-        case SubDev::SUCCESS:
-          LogInfo("Tx SUCCESS\n");
-          break;
-        case SubDev::CMD_ERROR:
-          LogInfo("Tx CMD ERROR\n");
-          break;
-        case SubDev::CRC_ERROR:
-          LogInfo("Tx CRC ERROR\n");
-          break;
-        default:
-          LogInfo("unhandled response received 0x%X\n", response);
-          break;
-      }
+      // switch (response) {
+      //   case SubDev::ERROR:
+      //     LogInfo("Tx ERROR\n");
+      //     break;
+      //   case SubDev::SUCCESS:
+      //     LogInfo("Tx SUCCESS\n");
+      //     break;
+      //   case SubDev::CMD_ERROR:
+      //     LogInfo("Tx CMD ERROR\n");
+      //     break;
+      //   case SubDev::CRC_ERROR:
+      //     LogInfo("Tx CRC ERROR\n");
+      //     break;
+      //   default:
+      //     LogInfo("unhandled response received 0x%X\n", response);
+      //     break;
+      // }
       // **********************************************/
     }
   }
