@@ -25,7 +25,7 @@ RX_TO_TX rtt;
 RF24 radio(RF_CE_PIN, RF_CSN_PIN); // Create a radio object
 
 FrontSubDev leftFront(LEFT_FRONT, LF_SUBDEV_SS_PIN, F_SUBDEV_TIMEOUT_US);
-FrontSubDev rightFront(RIGHT_FRONT, RF_SUBDEV_SS_PIN, 2500); // to test REAR subdev m5 run/stop cmds F_SUBDEV_TIMEOUT_US); // increase further for sending 2 floats with 1 command
+FrontSubDev rightFront(RIGHT_FRONT, RF_SUBDEV_SS_PIN, F_SUBDEV_TIMEOUT_US);
 RearSubDev leftRear(LEFT_REAR, LR_SUBDEV_SS_PIN, R_SUBDEV_TIMEOUT_US);
 RearSubDev rightRear(RIGHT_REAR, RR_SUBDEV_SS_PIN, R_SUBDEV_TIMEOUT_US);
 

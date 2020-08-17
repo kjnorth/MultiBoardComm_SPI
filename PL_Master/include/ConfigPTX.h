@@ -66,9 +66,9 @@ typedef struct {
 
 // communication retrys and timeouts
 #define NUM_RETRYS 3
-#define F_SUBDEV_TIMEOUT_US 1000 // front subdev response timeout in microseconds
+#define F_SUBDEV_TIMEOUT_US 2500 // front subdev response timeout in microseconds
 #define R_SUBDEV_TIMEOUT_US 2000 // longer for rear devs since they communicate with rclaws
-#define REC_DATA_TIMEOUT_US 500//300 // timeout waiting for data available after receiving DATA_INCOMING response
+#define REC_DATA_TIMEOUT_US 500 // timeout waiting for data available after receiving DATA_INCOMING response
 // **** END SUB DEV DEFINES ****
 
 #endif /* CONFIG_PTX_H_ */
