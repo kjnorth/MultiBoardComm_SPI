@@ -15,10 +15,14 @@
 
 #define TX_BTN_IN 7
 
+#define CLK_SPEED 16000000 // 16MHz
+#define PRESCALER_T1 8 // NOTE: If changing this val, must change TCCR1B in InitTimer1ISR() appropriately
+
 void InitRadio(void);
-bool IsConnected(void);
+void IsConnected(void);
 void UpdateTruckData(void);
 bool isTxBtnPressedEvent(void);
+void InitTimer1ISR(unsigned int freqHz);
 
 TX_TO_RX ttr;
 RX_TO_TX rtt;
@@ -35,21 +39,25 @@ void setup() {
   COMM_BUS.begin(115200);
   pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
+  InitTimer1ISR(200);
+}
+
+// volatile uint16_t isrCount = 0;
+
+ISR(TIMER1_COMPA_vect) {
+  UpdateTruckData();
 }
 
 unsigned long curTime = 0;
 unsigned long preLogTime = 0;
 unsigned long preSendTime = 0;
-unsigned long lastReceiveTime = 0;
+volatile bool truckConnStatus = false;
 void loop() {
   curTime = millis();
 
   IsConnected();
-  if (curTime - preSendTime >= 10) { // write data to truck PRX at 100Hz frequency
+  if (curTime - preSendTime >= 10) { // run loop at 100Hz frequency
     preSendTime = curTime;
-    // truck comm
-    UpdateTruckData(); // use a timer ISR to set a flag to update truck data at 200 Hz, and also run BLE update data
-                      // NOTE that BLE will likely be a different, professional remote so leave on hold for now
     // right front nano comm
     if (isTxBtnPressedEvent()) { // ensure function is called no faster than 200 Hz
       // if (rightFront.ReadAttitude()) {
@@ -95,13 +103,13 @@ void loop() {
     }
   }
 
-  // if (curTime - preLogTime >= 1000) {
-  //   LogInfo("pitch ", rtt.Pitch, 2);
-  //   LogInfo(", roll ", rtt.Roll, 2);
-  //   LogInfo(F(", switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
-  //               rtt.SwitchStatus, rtt.SolenoidStatus, IsConnected());
-  //   preLogTime = curTime;
-  // }
+  if (curTime - preLogTime >= 1000) {
+    LogInfo("pitch ", rtt.Pitch, 2);
+    LogInfo(", roll ", rtt.Roll, 2);
+    LogInfo(F(", switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
+                rtt.SwitchStatus, rtt.SolenoidStatus, truckConnStatus);
+    preLogTime = curTime;
+  }
 }
 
 /** 
@@ -118,19 +126,23 @@ void InitRadio(void) {
   pinMode(RF_IRQ_PIN, INPUT);
 #endif
 
-  if (!radio.begin())
-    Serial.println("PTX failed to initialize");
+  if (!radio.begin()) {
+    TRUCK_DEBUG("PTX failed to initialize\n");
+  }
   else {
     // RF24 library begin() function enables PTX mode
     radio.setAddressWidth(5); // set address size to 5 bytes
-    radio.setRetries(1, 5); // set 5 retries with 500us delays in between
+    /** NOTE: as TRUCK_TO_MAIN packet is increased, will have to increase
+		 * the delay time between retries. Right now, 500us (1) is fine. Review
+     * datasheet when increasing packet size further */
+		radio.setRetries(1, 5); // set 5 retries with 500us delays in between. Increase to 10 if lots of disconnects on production board
     radio.setChannel(RF_CHANNEL); // set communication channel
     radio.enableAckPayload(); // enable payload attached to ACK from PRX
     radio.enableDynamicPayloads(); // must be enabled to receive ACK payload correctly
-    radio.setPALevel(RF24_PA_LOW); // set power amplifier level. Using LOW for tests on bench. Should use HIGH on PL/Truck
+    radio.setPALevel(RF24_PA_HIGH); // set power amplifier level. Using LOW for tests on bench. Should use HIGH on PL/Truck
     radio.setDataRate(RF24_1MBPS); // set data rate to most reliable speed
     radio.openWritingPipe(RF_PTX_WRITE_ADDR); // open the writing pipe on the address we chose
-    Serial.println("PTX initialization successful");
+    TRUCK_DEBUG("PTX initialization successful\n");
   }
 }
 
@@ -140,17 +152,15 @@ void InitRadio(void) {
  * @Desc: checks if the PTX is connected to the PRX
  * @Return: true if connected, false if not 
  */
-bool IsConnected(void) {
-  static bool conn = false;
-  if (curTime - lastReceiveTime >= 250 && conn) {
-    LogInfo("connection to PRX is lost!\n");
-    conn = false;
+void IsConnected(void) {
+  static bool preConn = false;
+  if (!truckConnStatus && preConn) {
+    TRUCK_DEBUG("connection to PRX is lost!\n");
   }
-  else if (lastReceiveTime > 0 && curTime - lastReceiveTime < 250 && !conn) {
-    LogInfo("established connection to PRX\n");
-    conn = true;
+  else if (truckConnStatus && !preConn) {
+    TRUCK_DEBUG("established connection to PRX\n");
   }
-  return conn;
+  preConn = truckConnStatus;
 }
 
 /** 
@@ -167,10 +177,13 @@ void UpdateTruckData(void) {
 #endif      
       if (radio.isAckPayloadAvailable()) {
         radio.read(&rtt, NUM_RTT_BYTES);
-        lastReceiveTime = curTime;
+        truckConnStatus = true;
       }
 #ifdef RF_USE_IRQ_PIN      
     }
+  }
+  else {
+    truckConnStatus = false;
   }
 #endif
 
@@ -181,7 +194,7 @@ void UpdateTruckData(void) {
   radio.startFastWrite(&ttr, NUM_TTR_BYTES, 0);
 #else    
   radio.writeFast(&ttr, NUM_TTR_BYTES, 0);
-#endif   
+#endif
 }
 
 bool isTxBtnPressedEvent(void) {
@@ -210,4 +223,19 @@ bool isTxBtnPressedEvent(void) {
   }
 
   return returnVal;
+}
+
+// With 64 prescaler, min freq is 3.8 Hz
+void InitTimer1ISR(unsigned int freqHz) {
+  TCCR1A = 0; // set this register to 0
+  TCCR1B = 0; // set this register to 0
+  TCNT1 = 0; // init counter value to 0
+  OCR1A = (uint16_t)(CLK_SPEED / (freqHz * PRESCALER_T1)) - 1; // set compare match register for increments at
+                                                               // freqHz, must be less than 65536 for timer 1
+  TCCR1B |= (1 << WGM12); // turn on CTC (Clear Timer on Compare Match) mode
+  // NOTE: comment/uncomment TCCR1B to match PRESCALER_T1 #define
+  // TCCR1B |= (1 << CS10); // CS10 bit set for 1 prescaler
+  TCCR1B |= (1 << CS11); // Set CS11 bit for 8 prescaler
+  // TCCR1B |= (1 << CS11) | (1 << CS10); // Set CS11 and CS10 bits for 64 prescaler
+  TIMSK1 |= (1 << OCIE1A); // enable the timer compare interrupt
 }

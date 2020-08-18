@@ -45,6 +45,15 @@ typedef struct {
 #define RF_MOSI_PIN         51
 #define RF_CLK_PIN          52
 #define RF_CSN_PIN					53 // slave select pin
+#define RF_COMM_TIMEOUT_MS  250
+
+// enable _TRUCK_DEBUG to display truck debug info
+#define _TRUCK_DEBUG
+#ifdef _TRUCK_DEBUG
+#define TRUCK_DEBUG(x) LogInfo(x);
+#else
+#define TRUCK_DEBUG(x)
+#endif
 // **** END TRUCK DEFINES ****
 
 // **** SUB DEV DEFINES ****
