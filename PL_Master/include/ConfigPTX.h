@@ -64,8 +64,8 @@ typedef struct {
 #define RF_SUBDEV_SS_PIN 5
 #define LR_SUBDEV_SS_PIN 6
 #define RR_SUBDEV_SS_PIN 7
-#define COMM_BUS_TX_PIN 18
-#define COMM_BUS_RX_PIN 19
+#define COMM_BUS_TX_PIN 14
+#define COMM_BUS_RX_PIN 15
 
 // pitch / roll offsets
 #define LF_SUBDEV_PITCH_OFFSET 0.11

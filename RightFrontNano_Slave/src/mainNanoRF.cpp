@@ -4,15 +4,15 @@
 #include "..\lib\DataLog\DataLog.h"
 #include "..\lib\RoboClaw\RoboClaw.h"
 
-#define SUB_DEV_SS_PIN 2
-#define SUB_DEV_TX_PIN 3
-#define SUB_DEV_RX_PIN 4
-#define SUB_DEV_IRQ_PIN 5
+#define SUB_DEV_SS_PIN 3 // NOTE: this is moving to an AND gate with the master TX line
+#define SUB_DEV_TX_PIN 4
+#define SUB_DEV_RX_PIN 5
+#define SUB_DEV_IRQ_PIN 6
 
 #define ROBOCLAW_ADDRESS 0x80
 #define ROBOCLAW_TIMEOUT_US 3500 // microseconds
-#define ROBOCLAW_TX_PIN 6
-#define ROBOCLAW_RX_PIN 7
+#define ROBOCLAW_TX_PIN 7
+#define ROBOCLAW_RX_PIN 8
 
 #define CLK_SPEED 16000000 // 16MHz
 #define PRESCALER_T1 1 // NOTE: If changing this val, must change TCCR1B in InitTimer1ISR() appropriately
@@ -67,7 +67,7 @@ uint16_t GetCRC16(unsigned char *buf, int nBytes);
 void InitTimer1ISR(unsigned int freqHz);
 
 SoftwareSerial rclawSerial(ROBOCLAW_RX_PIN, ROBOCLAW_TX_PIN); // Rx, Tx - roboclaw serial port
-RoboClaw rclaw(&rclawSerial, ROBOCLAW_TIMEOUT_US);
+RoboClaw rclaw(&rclawSerial, ROBOCLAW_TIMEOUT_US); // instantiate roboclaw object
 
 SoftwareSerial masterSerial(SUB_DEV_RX_PIN, SUB_DEV_TX_PIN); // Rx, Tx - master board serial bus
 
