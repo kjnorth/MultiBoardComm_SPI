@@ -42,10 +42,21 @@ void setup() {
   InitTimer1ISR(200);
 }
 
-// volatile uint16_t isrCount = 0;
+volatile uint16_t isrCount1A = 0;
+volatile uint16_t isrCount1B = 0;
+volatile uint16_t isrCount1C = 0;
 
 ISR(TIMER1_COMPA_vect) {
-  UpdateTruckData();
+  // UpdateTruckData();
+  isrCount1A++;
+}
+
+ISR(TIMER1_COMPB_vect) {
+  isrCount1B++;
+}
+
+ISR(TIMER1_COMPC_vect) {
+  isrCount1C++;
 }
 
 unsigned long curTime = 0;
@@ -82,23 +93,6 @@ void loop() {
         leftFront.ReadAttitude();
       }
       flip = !flip;
-      // switch (response) {
-      //   case SubDev::ERROR:
-      //     LogInfo("Tx ERROR\n");
-      //     break;
-      //   case SubDev::SUCCESS:
-      //     LogInfo("Tx SUCCESS\n");
-      //     break;
-      //   case SubDev::CMD_ERROR:
-      //     LogInfo("Tx CMD ERROR\n");
-      //     break;
-      //   case SubDev::CRC_ERROR:
-      //     LogInfo("Tx CRC ERROR\n");
-      //     break;
-      //   default:
-      //     LogInfo("unhandled response received 0x%X\n", response);
-      //     break;
-      // }
       // **********************************************/
     }
   }
@@ -227,12 +221,27 @@ bool isTxBtnPressedEvent(void) {
 
 // With 64 prescaler, min freq is 3.8 Hz
 void InitTimer1ISR(unsigned int freqHz) {
-  TCCR1A = 0; // set this register to 0
-  TCCR1B = 0; // set this register to 0
+  /** TCCR1A - [7:6] is compare output mode (COM) for channel A
+   * [5:4] COM B
+   * [3:2] COM C
+   * [1:0] is waveform generation mode, WGM[1:0]. see tables 17-3, 17-4, 17-5 in Atmega2560 datasheet
+   * or search for "WGMn3:0" for all info */
+  TCCR1A = 0; // note that 0 is the register's default value
+  /** TCCR1B - [7] is input capture noise canceller (ICNC), basically a built in debouncer for 4 clock cycles
+   * [6] input capture edge select (ICES), selects which edge is used to trigger an input capture event
+   * [5] is reserved
+   * [4:3] is WGM[3:2] see tables 17-3, 17-4, 17-5 in Atmega2560 datasheet or search for "WGMn3:0" for all info
+   * [2:0] is clock source (prescaler) bits. see table 17-6 in Atmega2560 datasheet */
+  TCCR1B = 0; // note that 0 is the register's default value
+  /** TCCR1C - [7:5] control forced output compare (FOC) A,B,C, respectively, for timer1.
+   * [4:0] are reserved. set all to 0 for ISR functionality */
+  TCCR1C = 0; // note that 0 is the register's default value
+
   TCNT1 = 0; // init counter value to 0
   OCR1A = (uint16_t)(CLK_SPEED / (freqHz * PRESCALER_T1)) - 1; // set compare match register for increments at
                                                                // freqHz, must be less than 65536 for timer 1
-  TCCR1B |= (1 << WGM12); // turn on CTC (Clear Timer on Compare Match) mode
+  TCCR1B |= (1 << WGM12); // turn on CTC (Clear Timer on Compare Match) mode // I think the tutorial page was wrong here
+                          // search for "WGMn3:0" in Atmega2560 datasheet for more info!
   // NOTE: comment/uncomment TCCR1B to match PRESCALER_T1 #define
   // TCCR1B |= (1 << CS10); // CS10 bit set for 1 prescaler
   TCCR1B |= (1 << CS11); // Set CS11 bit for 8 prescaler
