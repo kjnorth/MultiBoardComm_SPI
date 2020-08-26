@@ -5,6 +5,7 @@
  */
 
 #include <Arduino.h>
+#include <util/atomic.h>
 #include "ConfigPTX.h"
 #include "..\lib\DataLog\DataLog.h"
 #include "nRF24L01.h"
@@ -14,6 +15,13 @@
 #include "RearSubDevice.h"
 
 #define TX_BTN_IN 23
+
+#define CLK_SPEED 16000000
+#define PRESCALER_T0_T1_T3_T4_T5 8 // all timers but timer 2 share the same prescaler
+
+uint16_t regA = (uint16_t)(CLK_SPEED / (1000 * PRESCALER_T0_T1_T3_T4_T5)) - 1;
+uint16_t regB = (uint16_t)(CLK_SPEED / (500 * PRESCALER_T0_T1_T3_T4_T5)) - 1;
+uint16_t regC = (uint16_t)(CLK_SPEED / (200 * PRESCALER_T0_T1_T3_T4_T5)) - 1;
 
 void InitRadio(void);
 void IsConnected(void);
@@ -36,7 +44,7 @@ void setup() {
   COMM_BUS.begin(115200);
   pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
-  InitTimer1ISR(1200);
+  InitTimer1ISR(1000);
 }
 
 volatile uint16_t isrCount1A = 0;
@@ -46,14 +54,17 @@ volatile uint16_t isrCount1C = 0;
 ISR(TIMER1_COMPA_vect) {
   // UpdateTruckData();
   isrCount1A++;
+  OCR1A += regA;
 }
 
 ISR(TIMER1_COMPB_vect) {
   isrCount1B++;
+  OCR1B += regB;
 }
 
 ISR(TIMER1_COMPC_vect) {
   isrCount1C++;
+  OCR1C += regC;
 }
 
 unsigned long curTime = 0;
@@ -84,16 +95,16 @@ void loop() {
         //   LogInfo("from right front: pitch ", rightFront.GetPitch(), 2);
         //   LogInfo(", roll ", rightFront.GetRoll(), 2, true);
         // }
-        noInterrupts();
-        TIMSK1 &= ~(1 << OCIE1A);
-        interrupts();
+        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+          TIMSK1 &= ~(1 << OCIE1A);
+        }
       }
       else {
         // response = rightFront.WriteCmd(rightFront.M5_STOP);
         // leftFront.ReadAttitude();
-        noInterrupts();
-        TIMSK1 |= (1 << OCIE1A);
-        interrupts();
+        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+          TIMSK1 |= (1 << OCIE1A);
+        }
       }
       flip = !flip;
       // **********************************************/
@@ -105,8 +116,10 @@ void loop() {
     // LogInfo(", roll ", rtt.Roll, 2);
     // LogInfo(F(", switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
     //             rtt.SwitchStatus, rtt.SolenoidStatus, truckConnStatus);
-    LogInfo(F("timer counts: a %u, b %u, c %u\n"), isrCount1A, isrCount1B, isrCount1C);
-    isrCount1A = 0; isrCount1B = 0; isrCount1C = 0;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      LogInfo(F("timer counts: a %u, b %u, c %u\n"), isrCount1A, isrCount1B, isrCount1C);
+      isrCount1A = 0; isrCount1B = 0; isrCount1C = 0;
+    }
     preLogTime = curTime;
   }
 }
@@ -224,9 +237,6 @@ bool isTxBtnPressedEvent(void) {
   return returnVal;
 }
 
-#define CLK_SPEED 16000000
-#define PRESCALER_T0_T1_T3_T4_T5 8
-// With 64 prescaler, min freq is 3.8 Hz
 void InitTimer1ISR(unsigned int freqHz) {
   /** TCCRnA
    * [7:6] is compare output mode (COM) for channel A
@@ -248,16 +258,18 @@ void InitTimer1ISR(unsigned int freqHz) {
   TCCR1C = 0; // note that 0 is the register's default value
 
   TCNT1 = 0; // init counter value to 0
-  TCCR1B |= (1 << WGM12); // turn on CTC (Clear Timer on Compare Match) mode
+  // TCCR1B |= (1 << WGM12); // turn on CTC (Clear Timer on Compare Match) mode
 
   /** NOTE: set PRESCALER_T0_T1_T3_T4_T5 #define to prescaler chosen with CSn2:0 bits,
    * see table 17-6 in Atmega2560 datasheet for available configurations */
   TCCR1B |= (1 << CS11); // Set CS11 bit for 8 prescaler
 
   // OCR1x registers must be less than 65536 for timer 1
-  OCR1A = (uint16_t)(CLK_SPEED / (freqHz * PRESCALER_T0_T1_T3_T4_T5)) - 1; // set channel A to interrupt at freqHzA
-  OCR1B = (uint16_t)(CLK_SPEED / (500 * PRESCALER_T0_T1_T3_T4_T5)) - 1;
-  OCR1C = (uint16_t)(CLK_SPEED / (1000 * PRESCALER_T0_T1_T3_T4_T5)) - 1;
+  // OCR1A = (uint16_t)(CLK_SPEED / (freqHz * PRESCALER_T0_T1_T3_T4_T5)) - 1; // set channel A to interrupt at freqHzA
+  OCR1A = regA;
+  // OCR1B = (uint16_t)(CLK_SPEED / (500 * PRESCALER_T0_T1_T3_T4_T5)) - 1;
+  OCR1B = regB;
+  OCR1C = regC;
 
   /** TIMSKn
    * [5] is ICIEn (interrupt capture interrupt enable), set to 1 to enable IC interrupt
@@ -267,6 +279,6 @@ void InitTimer1ISR(unsigned int freqHz) {
    * [0] is TOIEn (timer overflow interrupt enable), set to 1 to enable interrupt when timer n overflows 
    * other bits in register are unused */
   TIMSK1 |= (1 << OCIE1A); // enable the timer compare channel A interrupt
-  // TIMSK1 |= (1 << OCIE1B);
-  // TIMSK1 |= (1 << OCIE1C);
+  TIMSK1 |= (1 << OCIE1B);
+  TIMSK1 |= (1 << OCIE1C);
 }
