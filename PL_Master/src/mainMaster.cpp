@@ -13,10 +13,7 @@
 #include "FrontSubDevice.h"
 #include "RearSubDevice.h"
 
-#define TX_BTN_IN 7
-
-#define CLK_SPEED 16000000 // 16MHz
-#define PRESCALER_T1 8 // NOTE: If changing this val, must change TCCR1B in InitTimer1ISR() appropriately
+#define TX_BTN_IN 23
 
 void InitRadio(void);
 void IsConnected(void);
@@ -39,7 +36,7 @@ void setup() {
   COMM_BUS.begin(115200);
   pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
-  InitTimer1ISR(200);
+  InitTimer1ISR(1200);
 }
 
 volatile uint16_t isrCount1A = 0;
@@ -83,14 +80,20 @@ void loop() {
         // I abstracted things to rightRear class before buidling a whole new project,
         // so now to run the test I write a rightRear cmd to a rightFront board.
         // response = rightFront.WriteCmd(rightFront.M5_FORWARD);
-        if (rightFront.ReadAttitude()) {
-          LogInfo("from right front: pitch ", rightFront.GetPitch(), 2);
-          LogInfo(", roll ", rightFront.GetRoll(), 2, true);
-        }
+        // if (rightFront.ReadAttitude()) {
+        //   LogInfo("from right front: pitch ", rightFront.GetPitch(), 2);
+        //   LogInfo(", roll ", rightFront.GetRoll(), 2, true);
+        // }
+        noInterrupts();
+        TIMSK1 &= ~(1 << OCIE1A);
+        interrupts();
       }
       else {
         // response = rightFront.WriteCmd(rightFront.M5_STOP);
-        leftFront.ReadAttitude();
+        // leftFront.ReadAttitude();
+        noInterrupts();
+        TIMSK1 |= (1 << OCIE1A);
+        interrupts();
       }
       flip = !flip;
       // **********************************************/
@@ -98,10 +101,12 @@ void loop() {
   }
 
   if (curTime - preLogTime >= 1000) {
-    LogInfo("pitch ", rtt.Pitch, 2);
-    LogInfo(", roll ", rtt.Roll, 2);
-    LogInfo(F(", switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
-                rtt.SwitchStatus, rtt.SolenoidStatus, truckConnStatus);
+    // LogInfo("pitch ", rtt.Pitch, 2);
+    // LogInfo(", roll ", rtt.Roll, 2);
+    // LogInfo(F(", switchStatus 0x%X, solenoid Status 0x%X, isConnected %d\n"),
+    //             rtt.SwitchStatus, rtt.SolenoidStatus, truckConnStatus);
+    LogInfo(F("timer counts: a %u, b %u, c %u\n"), isrCount1A, isrCount1B, isrCount1C);
+    isrCount1A = 0; isrCount1B = 0; isrCount1C = 0;
     preLogTime = curTime;
   }
 }
@@ -219,32 +224,49 @@ bool isTxBtnPressedEvent(void) {
   return returnVal;
 }
 
+#define CLK_SPEED 16000000
+#define PRESCALER_T0_T1_T3_T4_T5 8
 // With 64 prescaler, min freq is 3.8 Hz
 void InitTimer1ISR(unsigned int freqHz) {
-  /** TCCR1A - [7:6] is compare output mode (COM) for channel A
+  /** TCCRnA
+   * [7:6] is compare output mode (COM) for channel A
    * [5:4] COM B
    * [3:2] COM C
-   * [1:0] is waveform generation mode, WGM[1:0]. see tables 17-3, 17-4, 17-5 in Atmega2560 datasheet
+   * [1:0] is waveform generation mode, WGMn[1:0]. see tables 17-3, 17-4, 17-5 in Atmega2560 datasheet
    * or search for "WGMn3:0" for all info */
   TCCR1A = 0; // note that 0 is the register's default value
-  /** TCCR1B - [7] is input capture noise canceller (ICNC), basically a built in debouncer for 4 clock cycles
+  /** TCCRnB
+   * [7] is input capture noise canceller (ICNC), basically a built in debouncer for 4 clock cycles
    * [6] input capture edge select (ICES), selects which edge is used to trigger an input capture event
    * [5] is reserved
-   * [4:3] is WGM[3:2] see tables 17-3, 17-4, 17-5 in Atmega2560 datasheet or search for "WGMn3:0" for all info
+   * [4:3] is WGMn[3:2] see tables 17-3, 17-4, 17-5 in Atmega2560 datasheet or search for "WGMn3:0" for all info
    * [2:0] is clock source (prescaler) bits. see table 17-6 in Atmega2560 datasheet */
   TCCR1B = 0; // note that 0 is the register's default value
-  /** TCCR1C - [7:5] control forced output compare (FOC) A,B,C, respectively, for timer1.
+  /** TCCRnC
+   * [7:5] control forced output compare (FOC) A,B,C, respectively
    * [4:0] are reserved. set all to 0 for ISR functionality */
   TCCR1C = 0; // note that 0 is the register's default value
 
   TCNT1 = 0; // init counter value to 0
-  OCR1A = (uint16_t)(CLK_SPEED / (freqHz * PRESCALER_T1)) - 1; // set compare match register for increments at
-                                                               // freqHz, must be less than 65536 for timer 1
-  TCCR1B |= (1 << WGM12); // turn on CTC (Clear Timer on Compare Match) mode // I think the tutorial page was wrong here
-                          // search for "WGMn3:0" in Atmega2560 datasheet for more info!
-  // NOTE: comment/uncomment TCCR1B to match PRESCALER_T1 #define
-  // TCCR1B |= (1 << CS10); // CS10 bit set for 1 prescaler
+  TCCR1B |= (1 << WGM12); // turn on CTC (Clear Timer on Compare Match) mode
+
+  /** NOTE: set PRESCALER_T0_T1_T3_T4_T5 #define to prescaler chosen with CSn2:0 bits,
+   * see table 17-6 in Atmega2560 datasheet for available configurations */
   TCCR1B |= (1 << CS11); // Set CS11 bit for 8 prescaler
-  // TCCR1B |= (1 << CS11) | (1 << CS10); // Set CS11 and CS10 bits for 64 prescaler
-  TIMSK1 |= (1 << OCIE1A); // enable the timer compare interrupt
+
+  // OCR1x registers must be less than 65536 for timer 1
+  OCR1A = (uint16_t)(CLK_SPEED / (freqHz * PRESCALER_T0_T1_T3_T4_T5)) - 1; // set channel A to interrupt at freqHzA
+  OCR1B = (uint16_t)(CLK_SPEED / (500 * PRESCALER_T0_T1_T3_T4_T5)) - 1;
+  OCR1C = (uint16_t)(CLK_SPEED / (1000 * PRESCALER_T0_T1_T3_T4_T5)) - 1;
+
+  /** TIMSKn
+   * [5] is ICIEn (interrupt capture interrupt enable), set to 1 to enable IC interrupt
+   * [3] is OCIEnC (output compart match C interrupt enable), set to 1 to enable OC interrupt on timer channel C
+   * [2] is OCIEnB, set to 1 to enable OC interrupt on timer channel B
+   * [1] is OCIEnA, set to 1 to enable OC interrupt on timer channel A
+   * [0] is TOIEn (timer overflow interrupt enable), set to 1 to enable interrupt when timer n overflows 
+   * other bits in register are unused */
+  TIMSK1 |= (1 << OCIE1A); // enable the timer compare channel A interrupt
+  // TIMSK1 |= (1 << OCIE1B);
+  // TIMSK1 |= (1 << OCIE1C);
 }
