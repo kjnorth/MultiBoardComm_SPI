@@ -6,6 +6,8 @@
  * @Note: Timer0 is left out because it controls delay(),
  * millis(), and micros(), and I do not want to alter
  * their functionality
+ * @Note: See ARDUINO TIMER REGISTER NOTES for register
+ * documentation
  */
 
 #ifndef TIMER_CONFIG_H_
@@ -93,18 +95,26 @@ class TimerConfig {
    * }
    * **** END CODE **** */
 
+  /** BIG: NOTE: Atmega2560 datasheet section 17-19 covers timer configurations for timers 0,1,3,4,5.
+   * Section 20 covers timer configs SPECIFIC to timer 2!
+   * Timer2 is quite finicky. It operates best when its compare match registers, OCR2A/B are closest to the
+   * maximum value of 255. I'm assuming this is because it is an 8 bit timer (so maybe Timer0 has similar
+   * issues). This means that the frequency range for a given prescaler is extremely limited, so be sure
+   * to test the TIMER0/2_COMPA/B_vect ISR for expected frequency when changing settings. */
+
   /** TCCRnA
    * [7:6] is compare output mode (COMn) for channel A
    * [5:4] COMnB
    * [3:2] COMnC
-   * [1:0] is waveform generation mode, WGMn[1:0]. see tables 17-2, 17-3, 17-4, 17-5 in Atmega2560 datasheet */
+   * [1:0] is waveform generation mode, WGMn[1:0]. see tables 17-2, 17-3, 17-4, 17-5 (or 20-8 for timer 2)
+   * in Atmega2560 datasheet */
 
   /** TCCRnB
    * [7] is input capture noise canceller (ICNCn), basically a built in debouncer for 4 clock cycles
    * [6] input capture edge select (ICESn), selects which edge is used to trigger an input capture event
    * [5] is reserved
-   * [4:3] is WGMn[3:2] see tables 17-2, 17-3, 17-4, 17-5 in Atmega2560 datasheet
-   * [2:0] is clock source (prescaler) bits. see table 17-6 in Atmega2560 datasheet */
+   * [4:3] is WGMn[3:2] see tables 17-2, 17-3, 17-4, 17-5 (or 20-8 for timer 2) in Atmega2560 datasheet
+   * [2:0] is clock source (prescaler) bits. see table 17-6 (or 20-9 for timer 2) in Atmega2560 datasheet */
 
   /** TCCRnC:
    * [7:5] control forced output compare (FOCn) A,B,C, respectively

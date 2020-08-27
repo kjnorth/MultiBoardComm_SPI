@@ -2,6 +2,8 @@
  * @Author: Kodiak North 
  * @Date: 2020-08-26 14:01:36 
  * @Desc: implements the TimerConfig class
+ * @Note: see notes at the bottom of TimerConfig.h
+ * when changing settings
  */
 
 #include "TimerConfig.h"
@@ -30,11 +32,12 @@
 
 // **** PRIVATE DEFINES ****
 #define CLK_SPEED           16000000
-/** NOTE: if changing PRESCALER_Tx, must change TCCRxB register appropriately to match 
- * NOTE: min and max frequencies are extremely unreliable. pick frequency well in between range */
-#define PRESCALER_T0        8 // min freq is 31 Hz, max freq is 2 MHz
+/** NOTE: if changing PRESCALER_Tx, must change TCCRxB register appropriately to match value
+ * NOTE: max frequencies are extremely unreliable. pick frequencies closer to the min range,
+ * especially for the 8 bit timers 0 and 2 */
+#define PRESCALER_T0        64 // min freq is 980 Hz, max freq is 1010 Hz (max freq tested)
 #define PRESCALER_T1        8 // min freq is 31 Hz, max freq is 2 MHz
-#define PRESCALER_T2        1024 // min freq is 62 Hz, max freq is 15.5 kHz
+#define PRESCALER_T2        64 // min freq is 980 Hz, max freq is 1010 Hz (max freq tested)
 #define PRESCALER_T3        8 // min freq is 31 Hz, max freq is 2 MHz
 #define PRESCALER_T4        8 // min freq is 31 Hz, max freq is 2 MHz
 #define PRESCALER_T5        8 // min freq is 31 Hz, max freq is 2 MHz
@@ -47,8 +50,8 @@
 timer_ocr_period_t timer1;
 timer_ocr_period_t timer2;
 timer_ocr_period_t timer3;
-timer_ocr_period_t timer4;
-timer_ocr_period_t timer5;
+// timer_ocr_period_t timer4;
+// timer_ocr_period_t timer5;
 // **** END DEFINITION OF GLOBAL VARIABLES ****
 
 // PWM unusable on Mega pins 11, 12; on Uno/Nano pins 9, 10
@@ -151,7 +154,7 @@ void TimerConfig::InitTimer2ISRs(uint16_t freqHzA, uint16_t freqHzB) {
   TCCR2A = 0; TCCR2B = 0; // set TCCRnx registers to 0
   TCNT2 = 0; // set initial counter value to 0
   /** NOTE: if changing TCCRxB prescaler bits, must make PRESCALER_Tx match new value in #define above */
-  TCCR2B |= (1 << CS22); // set CS21 bit for 8 prescaler
+  TCCR2B |= (1 << CS22); // set CS22 bit for 64 prescaler
   timer2.aPeriod = OCRnx_CONFIG_PERIOD(freqHzA, PRESCALER_T2);
   timer2.bPeriod = OCRnx_CONFIG_PERIOD(freqHzB, PRESCALER_T2);
 

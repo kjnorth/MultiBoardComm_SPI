@@ -37,7 +37,7 @@ void setup() {
   COMM_BUS.begin(115200);
   pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
-  TimerConfig::InitTimer2ISRs(400, 1300);
+  TimerConfig::InitTimer2ISRs(980, 1010);
   TimerConfig::StartTimer2ISRs((A | B));
 }
 
