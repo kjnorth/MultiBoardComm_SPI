@@ -148,29 +148,166 @@ void TimerConfig::StopTimer1ISRs(uint8_t stopMask) {
 
 // PWM unusable on Mega pins 9, 10; on Uno/Nano pins 3, 11
 void TimerConfig::InitTimer2ISRs(uint16_t freqHzA, uint16_t freqHzB) {
+  TCCR2A = 0; TCCR2B = 0; // set TCCRnx registers to 0
+  TCNT2 = 0; // set initial counter value to 0
+  /** NOTE: if changing TCCRxB prescaler bits, must make PRESCALER_Tx match new value in #define above */
+  TCCR2B |= (1 << CS22); // set CS21 bit for 8 prescaler
+  timer2.aPeriod = OCRnx_CONFIG_PERIOD(freqHzA, PRESCALER_T2);
+  timer2.bPeriod = OCRnx_CONFIG_PERIOD(freqHzB, PRESCALER_T2);
 
+  if (timer2.aPeriod <= TIMER_16BIT_MAX) {
+    OCR2A = timer2.aPeriod;
+  }
+  else {
+    OCR2A = 0;
+    LogInfo("TimerConfig::InitTimer2ISRs - ERROR timer2 A frequency is too low, increase frequency or alter prescaler\n");
+  }
+
+  if (timer2.bPeriod <= TIMER_16BIT_MAX) {
+    OCR2B = timer2.bPeriod;
+  }
+  else {
+    OCR2B = 0;
+    LogInfo("TimerConfig::InitTimer2ISRs - ERROR timer2 B frequency is too low, increase frequency or alter prescaler\n");
+  }
 }
 
 void TimerConfig::StartTimer2ISRs(uint8_t startMask) {
+  uint8_t aStatus = TIMSK2 & (1 << OCIE2A); // nonzero if A channel is already started
+  uint8_t bStatus = TIMSK2 & (1 << OCIE2B); // nonzero if B channel is already started
 
+  if ((startMask & A) && !aStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK2 |= (1 << OCIE2A);
+      OCR2A = TCNT2 + timer2.aPeriod;
+    }
+  }
+
+  if ((startMask & B) && !bStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK2 |= (1 << OCIE2B);
+      OCR2B = TCNT2 + timer2.bPeriod;
+    }
+  }
 }
 
 void TimerConfig::StopTimer2ISRs(uint8_t stopMask) {
+  uint8_t aStatus = TIMSK2 & (1 << OCIE2A); // nonzero if A channel is started
+  uint8_t bStatus = TIMSK2 & (1 << OCIE2B); // nonzero if B channel is started
 
+  if ((stopMask & A) && aStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK2 &= ~(1 << OCIE2A);
+      OCR2A = TCNT2 + timer2.aPeriod;
+    }
+  }
+
+  if ((stopMask & B) && bStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK2 &= ~(1 << OCIE2B);
+      OCR2B = TCNT2 + timer2.bPeriod;
+    }
+  }
 }
 
 #if defined(__AVR_ATmega2560__) // only prototype/implement these functions if using Atmega2560 chip
 // PWM unusable on Mega pins 2, 3, 5
 void TimerConfig::InitTimer3ISRs(uint16_t freqHzA, uint16_t freqHzB, uint16_t freqHzC) {
+  TCCR3A = 0; TCCR3B = 0; TCCR3C = 0; // set TCCRnx registers to 0
+  TCNT3 = 0; // set initial counter value to 0
+  /** NOTE: if changing TCCRxB prescaler bits, must make PRESCALER_Tx match new value in #define above */
+  TCCR3B |= (1 << CS31); // set CS31 bit for 8 prescaler
+  timer3.aPeriod = OCRnx_CONFIG_PERIOD(freqHzA, PRESCALER_T3);
+  timer3.bPeriod = OCRnx_CONFIG_PERIOD(freqHzB, PRESCALER_T3);
+  timer3.cPeriod = OCRnx_CONFIG_PERIOD(freqHzC, PRESCALER_T3);
 
+  if (timer3.aPeriod <= TIMER_16BIT_MAX) {
+    OCR3A = timer3.aPeriod;
+  }
+  else {
+    OCR3A = 0;
+    LogInfo("TimerConfig::InitTimer3ISRs - ERROR timer3 A frequency is too low, increase frequency or alter prescaler\n");
+  }
+
+  if (timer3.bPeriod <= TIMER_16BIT_MAX) {
+    OCR3B = timer3.bPeriod;
+  }
+  else {
+    OCR3B = 0;
+    LogInfo("TimerConfig::InitTimer3ISRs - ERROR timer3 B frequency is too low, increase frequency or alter prescaler\n");
+  }
+
+  if (timer3.cPeriod <= TIMER_16BIT_MAX) {
+    OCR3C = timer3.cPeriod;
+  }
+  else {
+    OCR3C = 0;
+    LogInfo("TimerConfig::InitTimer3ISRs - ERROR timer3 C frequency is too low, increase frequency or alter prescaler\n");
+  }
 }
 
 void TimerConfig::StartTimer3ISRs(uint8_t startMask) {
+  uint8_t aStatus = TIMSK3 & (1 << OCIE3A); // nonzero if A channel is already started
+  uint8_t bStatus = TIMSK3 & (1 << OCIE3B); // nonzero if B channel is already started
+  uint8_t cStatus = TIMSK3 & (1 << OCIE3C); // nonzero if C channel is already started
 
+  if ((startMask & A) && !aStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK3 |= (1 << OCIE3A);
+      OCR3A = TCNT3 + timer3.aPeriod;
+    }
+  }
+
+  if ((startMask & B) && !bStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK3 |= (1 << OCIE3B);
+      OCR3B = TCNT3 + timer3.bPeriod;
+    }
+  }
+
+  if ((startMask & C) && !cStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK3 |= (1 << OCIE3C);
+      OCR3C = TCNT3 + timer3.cPeriod;
+    }
+  }
 }
 
 void TimerConfig::StopTimer3ISRs(uint8_t stopMask) {
+  uint8_t aStatus = TIMSK3 & (1 << OCIE3A); // nonzero if A channel is started
+  uint8_t bStatus = TIMSK3 & (1 << OCIE3B); // nonzero if B channel is started
+  uint8_t cStatus = TIMSK3 & (1 << OCIE3C); // nonzero if C channel is started
 
+  if ((stopMask & A) && aStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK3 &= ~(1 << OCIE3A);
+      OCR3A = TCNT3 + timer3.aPeriod;
+    }
+  }
+
+  if ((stopMask & B) && bStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK3 &= ~(1 << OCIE3B);
+      OCR3B = TCNT3 + timer3.bPeriod;
+    }
+  }
+
+  if ((stopMask & C) && cStatus) {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      // disable interrupts when modifying registers, reenable upon exit of scope
+      TIMSK3 &= ~(1 << OCIE3C);
+      OCR3C = TCNT3 + timer3.cPeriod;
+    }
+  }
 }
 
 // PWM unusable on Mega pins 6, 7, 8

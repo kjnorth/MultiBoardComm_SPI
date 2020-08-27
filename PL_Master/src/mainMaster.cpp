@@ -21,7 +21,6 @@ void InitRadio(void);
 void IsConnected(void);
 void UpdateTruckData(void);
 bool isTxBtnPressedEvent(void);
-void InitTimer1ISR(unsigned int freqHz);
 
 TX_TO_RX ttr;
 RX_TO_TX rtt;
@@ -38,31 +37,28 @@ void setup() {
   COMM_BUS.begin(115200);
   pinMode(TX_BTN_IN, INPUT_PULLUP);
   InitRadio();
-  TimerConfig::InitTimer1ISRs(100, 300, 1200);
-  TimerConfig::StartTimer1ISRs((A | B | C));
+  TimerConfig::InitTimer2ISRs(400, 1300);
+  TimerConfig::StartTimer2ISRs((A | B));
 }
 
 volatile uint16_t isrCount1A = 0;
 volatile uint16_t isrCount1B = 0;
 volatile uint16_t isrCount1C = 0;
 
-ISR(TIMER1_COMPA_vect) {
+ISR(TIMER2_COMPA_vect) {
   // UpdateTruckData();
   isrCount1A++;
-  // OCR1A += regA;
-  OCR1A += timer1.aPeriod;
+  OCR2A += timer2.aPeriod;
 }
 
-ISR(TIMER1_COMPB_vect) {
+ISR(TIMER2_COMPB_vect) {
   isrCount1B++;
-  // OCR1B += regB;
-  OCR1B += timer1.bPeriod;
+  OCR2B += timer2.bPeriod;
 }
 
-ISR(TIMER1_COMPC_vect) {
+ISR(TIMER3_COMPC_vect) {
   isrCount1C++;
-  // OCR1C += regC;
-  OCR1C += timer1.cPeriod;
+  OCR3C += timer3.cPeriod;
 }
 
 unsigned long curTime = 0;
@@ -94,17 +90,14 @@ void loop() {
         //   LogInfo(", roll ", rightFront.GetRoll(), 2, true);
         // }
         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-          // TIMSK1 &= ~(1 << OCIE1B);
-          TimerConfig::StopTimer1ISRs((A | B));
+          TimerConfig::StopTimer2ISRs((B));
         }
       }
       else {
         // response = rightFront.WriteCmd(rightFront.M5_STOP);
         // leftFront.ReadAttitude();
         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-          // OCR1B = TCNT1 + regB;
-          // TIMSK1 |= (1 << OCIE1B);
-          TimerConfig::StartTimer1ISRs((A | B));
+          TimerConfig::StartTimer2ISRs((B));
         }
       }
       flip = !flip;
