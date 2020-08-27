@@ -9,6 +9,8 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <util/atomic.h>
+#include "..\lib\DataLog\DataLog.h"
 
 // **** TRUCK DEFINES ****
 typedef struct {
